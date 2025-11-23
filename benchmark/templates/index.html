@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>pyjobkit Load Test</title>
+  <meta http-equiv="refresh" content="2">
+  <style>
+    body { font-family: system-ui; background: #0d1117; color: #c9d1d9; padding: 20px; }
+    .card { background: #161b22; padding: 20px; border-radius: 10px; margin: 10px 0; }
+    .big { font-size: 48px; font-weight: bold; color: #58a6ff; }
+    .chart { height: 100px; background: #21262d; border-radius: 6px; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h1>pyjobkit — нагрузочное тестирование</h1>
+  
+  <div class="card">
+    <div>Текущий RPS: <span class="big">{{ current_rps }}</span></div>
+    <div>Средний RPS (за минуту): <strong>{{ "%.2f"|format(avg_rps) }}</strong></div>
+    <div>Всего обработано заданий: <strong>{{ total_processed }}</strong></div>
+  </div>
+
+  <div class="card">
+    <h3>RPS за последнюю минуту</h3>
+    <div class="chart">
+      {% for r in rps_history %}
+        <span style="color:{% if r > 100 %}#79c879{% else %}#f0883e{% endif %}">█</span>
+      {% endfor %}
+      {{ rps_history|join(' | ') }}
+    </div>
+  </div>
+
+  <small>Обновляется каждые 2 сек • ENQUEUE_RATE={{ request.app.state.rate|default(150) }}/s</small>
+</body>
+</html>

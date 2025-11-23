@@ -1,0 +1,7 @@
+pyjobkit
+fastapi
+uvicorn[standard]
+jinja2
+asyncpg
+sqlalchemy[asyncio]
+psutil
