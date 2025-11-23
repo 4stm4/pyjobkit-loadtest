@@ -15,7 +15,11 @@ services:
       - "5432:5432"
 
   benchmark:
-    build: ./benchmark
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./benchmark:/app
+    command: bash -c "pip install --no-cache-dir -r requirements.txt && python web.py"
     container_name: pyjobkit-benchmark
     depends_on:
       - postgres
