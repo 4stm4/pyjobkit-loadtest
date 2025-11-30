@@ -1,9 +1,10 @@
 import asyncio
+import logging
 import os
 import time
 from collections import deque
-from typing import Iterable, Tuple
 from pathlib import Path
+from typing import Iterable, Tuple
 
 from pyjobkit import Engine, Worker
 from pyjobkit.backends.sql import SQLBackend
@@ -21,6 +22,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.sql.schema import Table
+
+
+logger = logging.getLogger(__name__)
 
 
 class Metrics:
@@ -116,12 +120,34 @@ async def enqueuer(engine: Engine, rate: int):
 
     interval = 1.0 / rate
     while True:
-        await engine.enqueue(
-            kind="subprocess",
-            payload={"cmd": "echo . && sleep 0.005"}  # лёгкая нагрузка
-        )
-        metrics.enqueued += 1
+        try:
+            await engine.enqueue(
+                kind="subprocess",
+                payload={"cmd": "echo . && sleep 0.005"},  # лёгкая нагрузка
+            )
+            metrics.enqueued += 1
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Не удалось поставить задачу в очередь, повтор через секунду")
+            await asyncio.sleep(1.0)
+            continue
+
         await asyncio.sleep(interval)
+
+
+async def worker_runner(engine: Engine, concurrency: int):
+    """Вспомогательный раннер, перезапускающий воркера при сбоях."""
+
+    worker = Worker(engine, max_concurrency=concurrency)
+    while True:
+        try:
+            await worker.run()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Воркер упал, пробуем перезапустить через секунду")
+            await asyncio.sleep(1.0)
 
 
 async def metrics_updater():
@@ -151,7 +177,7 @@ async def start_benchmark(
 
     tasks = (
         asyncio.create_task(enqueuer(engine, rate)),
-        asyncio.create_task(Worker(engine, max_concurrency=concurrency).run()),
+        asyncio.create_task(worker_runner(engine, concurrency)),
         asyncio.create_task(metrics_updater()),
     )
 
