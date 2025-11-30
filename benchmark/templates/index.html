@@ -12,11 +12,12 @@
 </head>
 <body>
   <h1>pyjobkit — нагрузочное тестирование</h1>
-  
+
   <div class="card">
     <div>Текущий RPS: <span class="big">{{ current_rps }}</span></div>
     <div>Средний RPS (за минуту): <strong>{{ "%.2f"|format(avg_rps) }}</strong></div>
     <div>Всего обработано заданий: <strong>{{ total_processed }}</strong></div>
+    <div>Заданий в очереди (оценка): <strong>{{ queue_length }}</strong></div>
   </div>
 
   <div class="card">
@@ -29,6 +30,6 @@
     </div>
   </div>
 
-  <small>Обновляется каждые 2 сек • ENQUEUE_RATE={{ request.app.state.rate|default(150) }}/s</small>
+  <small>Обновляется каждые 2 сек • ENQUEUE_RATE={{ request.app.state.rate|default(150) }}/s • CONCURRENCY={{ request.app.state.concurrency|default(8) }}</small>
 </body>
 </html>
