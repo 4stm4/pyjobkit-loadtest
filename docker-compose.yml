@@ -1,18 +1,42 @@
-
 version: "3.9"
-  pg-cleanup:
-  pg-cleanup:
-    image: alpine
-    command: sh -c "rm -rf /var/lib/postgresql/data/docker-entrypoint-initdb.d/01-init.sql"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-
-    image: alpine
-    command: sh -c "rm -rf /var/lib/postgresql/data/docker-entrypoint-initdb.d/01-init.sql"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
 
 services:
+  pg-cleanup:
+    image: alpine
+    command: sh -c "rm -rf /var/lib/postgresql/data/docker-entrypoint-initdb.d/01-init.sql"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: pg
+    environment:
+      POSTGRES_DB: jobkit
+      POSTGRES_USER: jobkit
+      POSTGRES_PASSWORD: jobkit
+    depends_on:
+      - pg-cleanup
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ports:
+      - "5432:5432"
+
+  benchmark:
+    image: python:3.11-slim
+    container_name: pyjobkit-benchmark
+    depends_on:
+      - postgres
+    environment:
+      - DSN=postgresql+asyncpg://jobkit:jobkit@postgres:5432/jobkit
+      - ENQUEUE_RATE=200
+      - CONCURRENCY=16
+    ports:
+      - "7777:7777"
+    restart: unless-stopped
+
+volumes:
+  pg_data:
   postgres:
     image: postgres:16-alpine
     container_name: pg
