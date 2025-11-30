@@ -38,34 +38,44 @@ metrics = Metrics()
 
 metadata = MetaData()
 
-jobkit_jobs = Table(
-    "jobkit_jobs",
+job_tasks = Table(
+    "job_tasks",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("kind", Text, nullable=False),
-    Column("payload", JSON().with_variant(Text(), "sqlite"), nullable=False),
-    Column("status", Text, nullable=False, server_default=text("'pending'")),
     Column(
         "created_at",
         DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    ),
+    Column(
+        "scheduled_for",
+        DateTime(timezone=True),
+        nullable=False,
         server_default=text("CURRENT_TIMESTAMP"),
     ),
     Column("started_at", DateTime(timezone=True)),
     Column("finished_at", DateTime(timezone=True)),
-    Column("lease_expires_at", DateTime(timezone=True)),
-    Column("attempts", Integer, server_default=text("0")),
+    Column("status", Text, nullable=False, server_default=text("'queued'")),
+    Column("attempts", Integer, nullable=False, server_default=text("0")),
+    Column("max_attempts", Integer, nullable=False, server_default=text("25")),
+    Column("priority", Integer, nullable=False, server_default=text("100")),
+    Column("kind", Text, nullable=False),
+    Column("payload", JSON().with_variant(Text(), "sqlite"), nullable=False),
+    Column("result", JSON().with_variant(Text(), "sqlite")),
+    Column("idempotency_key", Text, unique=True),
+    Column("cancel_requested", Integer, nullable=False, server_default=text("0")),
+    Column("leased_by", Text),
+    Column("lease_until", DateTime(timezone=True)),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    Column("timeout_s", Integer, nullable=False, server_default=text("300")),
 )
 
 Index(
-    "idx_jobkit_pending",
-    jobkit_jobs.c.status,
-    jobkit_jobs.c.lease_expires_at,
-    sqlite_where=text(
-        "status = 'pending' AND (lease_expires_at IS NULL OR lease_expires_at < CURRENT_TIMESTAMP)"
-    ),
-    postgresql_where=text(
-        "status = 'pending' AND (lease_expires_at IS NULL OR lease_expires_at < now())"
-    ),
+    "idx_job_tasks_queue",
+    job_tasks.c.status,
+    job_tasks.c.scheduled_for,
+    job_tasks.c.lease_until,
 )
 
 
