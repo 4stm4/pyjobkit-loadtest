@@ -28,12 +28,17 @@ services:
     container_name: pyjobkit-benchmark
     depends_on:
       - postgres
+    working_dir: /app
+    volumes:
+      - ./:/app
     environment:
       - DSN=postgresql+asyncpg://jobkit:jobkit@postgres:5432/jobkit
       - ENQUEUE_RATE=200
       - CONCURRENCY=16
     ports:
       - "7777:7777"
+    command: >-
+      sh -c "pip install --no-cache-dir -r benchmark/requirements.txt && uvicorn benchmark.web:app --host 0.0.0.0 --port 7777"
     restart: unless-stopped
 
 volumes:
