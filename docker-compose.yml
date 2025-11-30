@@ -14,6 +14,5 @@ services:
     ports:
       - "7777:7777"
     command: >-
-      ls /app && sh -c "pip install --no-cache-dir -r /app/benchmark/requirements.txt && cd benchmark && uvicorn web:app --host 0.0.0.0 --port 7777"
+      sh -c "ls /app && pip install --no-cache-dir -r /app/benchmark/requirements.txt && cd benchmark && uvicorn web:app --host 0.0.0.0 --port 7777"
     restart: unless-stopped
-
