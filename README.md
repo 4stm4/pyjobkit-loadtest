@@ -14,6 +14,11 @@ This repository contains a lightweight load testing benchmark for pyjobkit. The 
 
 3. Open the benchmark UI at [http://localhost:7777](http://localhost:7777).
 
+If you want to run the app locally without Docker, the service will default to a
+SQLite database at `./jobkit.db` when the `DSN` environment variable is not set
+(a warning is logged). `ENQUEUE_RATE` and `CONCURRENCY` keep their defaults of
+`100` and `8` unless you override them in the environment.
+
 ## Common pitfalls
 
 - Ensure the container has network access to GitHub so it can clone the repository during startup.

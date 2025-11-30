@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 
 from app import (
+    load_settings,
     metrics,
     start_benchmark,
     stop_tasks,
@@ -18,12 +19,7 @@ templates = Jinja2Templates(directory="templates")
 
 @app.on_event("startup")
 async def startup_event():
-    dsn = os.getenv("DSN")
-    if not dsn:
-        raise RuntimeError("DSN environment variable is required")
-
-    rate = int(os.getenv("ENQUEUE_RATE", "100"))
-    concurrency = int(os.getenv("CONCURRENCY", "8"))
+    dsn, rate, concurrency = load_settings()
 
     app.state.rate = rate
     app.state.concurrency = concurrency

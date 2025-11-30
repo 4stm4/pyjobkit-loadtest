@@ -37,6 +37,8 @@ class Metrics:
     rps_history: deque = deque(maxlen=60)  # последние 60 секунд
 
 
+DEFAULT_DSN = "sqlite+aiosqlite:///./jobkit.db"
+
 metrics = Metrics()
 
 
@@ -113,6 +115,22 @@ class InstrumentedSubprocessExecutor(SubprocessExecutor):
         result = await super().execute(job)
         metrics.processed += 1
         return result
+
+
+def load_settings() -> Tuple[str, int, int]:
+    """Read configuration from the environment with safe defaults."""
+
+    dsn = os.getenv("DSN")
+    if not dsn:
+        logging.warning(
+            "DSN environment variable is not set; falling back to %s", DEFAULT_DSN
+        )
+        dsn = DEFAULT_DSN
+
+    rate = int(os.getenv("ENQUEUE_RATE", "100"))
+    concurrency = int(os.getenv("CONCURRENCY", "8"))
+
+    return dsn, rate, concurrency
 
 
 async def enqueuer(engine: Engine, rate: int):
@@ -193,12 +211,7 @@ async def stop_tasks(tasks: Iterable[asyncio.Task]):
 
 
 async def main():
-    dsn = os.getenv("DSN")
-    if not dsn:
-        raise RuntimeError("DSN environment variable is required")
-
-    rate = int(os.getenv("ENQUEUE_RATE", "100"))
-    concurrency = int(os.getenv("CONCURRENCY", "8"))
+    dsn, rate, concurrency = load_settings()
 
     _engine, tasks = await start_benchmark(dsn, rate, concurrency)
     await asyncio.gather(*tasks)
