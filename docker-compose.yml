@@ -18,6 +18,8 @@ services:
     image: postgres:16-alpine
     depends_on:
       - postgres
+    environment:
+      - PGPASSWORD=jobkit
     volumes:
       - ./init-db.sql:/01-init.sql        
     command: >
