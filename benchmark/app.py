@@ -3,10 +3,12 @@ import os
 import time
 from collections import deque
 from typing import Iterable, Tuple
+from pathlib import Path
 
 from pyjobkit import Engine, Worker
 from pyjobkit.backends.sql import SQLBackend
 from pyjobkit.executors import SubprocessExecutor
+from sqlalchemy.engine import make_url
 from sqlalchemy import (
     Column,
     DateTime,
@@ -74,6 +76,22 @@ async def ensure_schema(sql_engine: AsyncEngine):
         await conn.run_sync(metadata.create_all)
 
 
+def ensure_sqlite_directory(dsn: str) -> None:
+    """Create the parent directory for a SQLite database if needed."""
+
+    url = make_url(dsn)
+    if url.get_backend_name() != "sqlite":
+        return
+
+    database = url.database
+    if not database or database == ":memory:":
+        return
+
+    db_path = Path(database).expanduser()
+    if not db_path.parent.exists():
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+
 class InstrumentedSubprocessExecutor(SubprocessExecutor):
     """Executor that increments processed metrics after successful runs."""
 
@@ -115,6 +133,7 @@ async def start_benchmark(
 ) -> Tuple[Engine, Iterable[asyncio.Task]]:
     """Create engine, workers and background tasks for the benchmark."""
 
+    ensure_sqlite_directory(dsn)
     sql_engine: AsyncEngine = create_async_engine(dsn)
     await ensure_schema(sql_engine)
     backend = SQLBackend(sql_engine, lease_ttl_s=60)
