@@ -7,7 +7,18 @@ from typing import Iterable, Tuple
 from pyjobkit import Engine, Worker
 from pyjobkit.backends.sql import SQLBackend
 from pyjobkit.executors import SubprocessExecutor
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Index,
+    Integer,
+    JSON,
+    MetaData,
+    Text,
+    text,
+)
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.sql.schema import Table
 
 
 class Metrics:
@@ -21,6 +32,46 @@ class Metrics:
 
 
 metrics = Metrics()
+
+
+metadata = MetaData()
+
+jobkit_jobs = Table(
+    "jobkit_jobs",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("kind", Text, nullable=False),
+    Column("payload", JSON().with_variant(Text(), "sqlite"), nullable=False),
+    Column("status", Text, nullable=False, server_default=text("'pending'")),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        server_default=text("CURRENT_TIMESTAMP"),
+    ),
+    Column("started_at", DateTime(timezone=True)),
+    Column("finished_at", DateTime(timezone=True)),
+    Column("lease_expires_at", DateTime(timezone=True)),
+    Column("attempts", Integer, server_default=text("0")),
+)
+
+Index(
+    "idx_jobkit_pending",
+    jobkit_jobs.c.status,
+    jobkit_jobs.c.lease_expires_at,
+    sqlite_where=text(
+        "status = 'pending' AND (lease_expires_at IS NULL OR lease_expires_at < CURRENT_TIMESTAMP)"
+    ),
+    postgresql_where=text(
+        "status = 'pending' AND (lease_expires_at IS NULL OR lease_expires_at < now())"
+    ),
+)
+
+
+async def ensure_schema(sql_engine: AsyncEngine):
+    """Create required tables for the SQL backend if they are missing."""
+
+    async with sql_engine.begin() as conn:
+        await conn.run_sync(metadata.create_all)
 
 
 class InstrumentedSubprocessExecutor(SubprocessExecutor):
@@ -65,6 +116,7 @@ async def start_benchmark(
     """Create engine, workers and background tasks for the benchmark."""
 
     sql_engine: AsyncEngine = create_async_engine(dsn)
+    await ensure_schema(sql_engine)
     backend = SQLBackend(sql_engine, lease_ttl_s=60)
     engine = Engine(backend=backend, executors=[InstrumentedSubprocessExecutor()])
 
