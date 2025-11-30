@@ -10,33 +10,15 @@ services:
       POSTGRES_PASSWORD: jobkit
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
     ports:
       - "5432:5432"
-
-
-  db-init:
-    image: postgres:16-alpine
-    depends_on:
-      - postgres
-    environment:
-      - PGPASSWORD=jobkit
-    volumes:
-      - ./init-db.sql:/01-init.sql        
-    command: >
-      sh -c "
-        until pg_isready -h postgres -p 5432; do
-          echo 'Waiting for postgres...';
-          sleep 2;
-        done;
-        echo 'Creating tables...';
-        psql -h postgres -U jobkit -d jobkit -f /01-init.sql
-      "
 
   benchmark:
     image: python:3.11-slim
     container_name: pyjobkit-benchmark
     depends_on:
-      - db-init
+      - postgres
     environment:
       - DSN=postgresql+asyncpg://jobkit:jobkit@postgres:5432/jobkit
       - ENQUEUE_RATE=200
