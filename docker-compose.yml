@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   benchmark:
-    image: python:3.11-slim
+    image: python:3.13-slim
     container_name: pyjobkit-benchmark
     working_dir: /app
     environment:
