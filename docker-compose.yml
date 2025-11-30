@@ -1,38 +1,14 @@
 version: "3.9"
 
 services:
-  pg-cleanup:
-    image: alpine
-    # Keep the container alive after cleanup to avoid an early exit in the compose stack
-    command: sh -c "rm -rf /var/lib/postgresql/data/docker-entrypoint-initdb.d/01-init.sql && tail -f /dev/null"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: pg
-    environment:
-      POSTGRES_DB: jobkit
-      POSTGRES_USER: jobkit
-      POSTGRES_PASSWORD: jobkit
-    depends_on:
-      - pg-cleanup
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
-
   benchmark:
     image: python:3.11-slim
     container_name: pyjobkit-benchmark
-    depends_on:
-      - postgres
     working_dir: /app
     volumes:
       - ./:/app
     environment:
-      - DSN=postgresql+asyncpg://jobkit:jobkit@postgres:5432/jobkit
+      - DSN=sqlite+aiosqlite:///app/jobkit.db
       - ENQUEUE_RATE=200
       - CONCURRENCY=16
     ports:
@@ -40,7 +16,4 @@ services:
     command: >-
       sh -c "pip install --no-cache-dir -r benchmark/requirements.txt && cd benchmark && uvicorn web:app --host 0.0.0.0 --port 7777"
     restart: unless-stopped
-
-volumes:
-  pg_data:
 

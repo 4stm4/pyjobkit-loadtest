@@ -2,6 +2,6 @@ pyjobkit
 fastapi
 uvicorn[standard]
 jinja2
-asyncpg
+aiosqlite
 sqlalchemy[asyncio]
 psutil
