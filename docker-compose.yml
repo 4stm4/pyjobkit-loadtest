@@ -1,4 +1,16 @@
+
 version: "3.9"
+  pg-cleanup:
+  pg-cleanup:
+    image: alpine
+    command: sh -c "rm -rf /var/lib/postgresql/data/docker-entrypoint-initdb.d/01-init.sql"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+    image: alpine
+    command: sh -c "rm -rf /var/lib/postgresql/data/docker-entrypoint-initdb.d/01-init.sql"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
 
 services:
   postgres:
@@ -8,6 +20,8 @@ services:
       POSTGRES_DB: jobkit
       POSTGRES_USER: jobkit
       POSTGRES_PASSWORD: jobkit
+    depends_on:
+      - pg-cleanup
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
@@ -26,4 +40,7 @@ services:
     ports:
       - "7777:7777"
     restart: unless-stopped
+
+volumes:
+  pg_data:
 
