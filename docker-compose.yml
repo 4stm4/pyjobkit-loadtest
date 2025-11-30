@@ -27,5 +27,3 @@ services:
       - "7777:7777"
     restart: unless-stopped
 
-volumes:
-  pg_data:
