@@ -5,8 +5,6 @@ services:
     image: python:3.11-slim
     container_name: pyjobkit-benchmark
     working_dir: /app
-    volumes:
-      - ./:/app
     environment:
       - DSN=sqlite+aiosqlite:///app/jobkit.db
       - ENQUEUE_RATE=200
@@ -14,5 +12,9 @@ services:
     ports:
       - "7777:7777"
     command: >-
-      sh -c "pip install --no-cache-dir -r /app/benchmark/requirements.txt && cd benchmark && uvicorn web:app --host 0.0.0.0 --port 7777"
+      sh -c "apt-get update && apt-get install -y --no-install-recommends git \ 
+      && if [ ! -d /app/.git ]; then git clone --depth 1 https://github.com/4stm4/pyjobkit-loadtest /app; else cd /app && git pull --rebase; fi \ 
+      && pip install --no-cache-dir -r /app/benchmark/requirements.txt \ 
+      && cd /app/benchmark \ 
+      && uvicorn web:app --host 0.0.0.0 --port 7777"
     restart: unless-stopped
