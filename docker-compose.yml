@@ -38,7 +38,7 @@ services:
     ports:
       - "7777:7777"
     command: >-
-      sh -c "pip install --no-cache-dir -r benchmark/requirements.txt && uvicorn benchmark.web:app --host 0.0.0.0 --port 7777"
+      sh -c "pip install --no-cache-dir -r /app/benchmark/requirements.txt && uvicorn benchmark.web:app --host 0.0.0.0 --port 7777"
     restart: unless-stopped
 
 volumes:
