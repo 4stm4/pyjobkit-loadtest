@@ -13,5 +13,6 @@ services:
       - CONCURRENCY=16
     ports:
       - "7777:7777"
-    command: ["sleep", "infinity"]
+    command: >-
+      sh -c "pip install --no-cache-dir -r /app/benchmark/requirements.txt && cd benchmark && uvicorn web:app --host 0.0.0.0 --port 7777"
     restart: unless-stopped
