@@ -13,5 +13,5 @@ services:
       - CONCURRENCY=16
     ports:
       - "7777:7777"
-    command: ["bash"]
+    command: ["sh"]
     restart: unless-stopped
