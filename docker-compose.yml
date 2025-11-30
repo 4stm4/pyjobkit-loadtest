@@ -3,7 +3,8 @@ version: "3.9"
 services:
   pg-cleanup:
     image: alpine
-    command: sh -c "rm -rf /var/lib/postgresql/data/docker-entrypoint-initdb.d/01-init.sql"
+    # Keep the container alive after cleanup to avoid an early exit in the compose stack
+    command: sh -c "rm -rf /var/lib/postgresql/data/docker-entrypoint-initdb.d/01-init.sql && tail -f /dev/null"
     volumes:
       - pg_data:/var/lib/postgresql/data
 
