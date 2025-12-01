@@ -89,6 +89,9 @@ async def ensure_schema(sql_engine: AsyncEngine):
     """Create required tables for the SQL backend if they are missing."""
 
     async with sql_engine.begin() as conn:
+        if sql_engine.url.get_backend_name() == "sqlite":
+            await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+            await conn.exec_driver_sql("PRAGMA busy_timeout=30000")
         await conn.run_sync(metadata.create_all)
 
 
@@ -190,7 +193,10 @@ async def start_benchmark(
     """Create engine, workers and background tasks for the benchmark."""
 
     ensure_sqlite_directory(dsn)
-    sql_engine: AsyncEngine = create_async_engine(dsn)
+    url = make_url(dsn)
+    connect_args = {"timeout": 30} if url.get_backend_name() == "sqlite" else {}
+
+    sql_engine: AsyncEngine = create_async_engine(dsn, connect_args=connect_args)
     await ensure_schema(sql_engine)
     backend = SQLBackend(sql_engine, lease_ttl_s=60)
     engine = Engine(backend=backend, executors=[InstrumentedSubprocessExecutor()])
