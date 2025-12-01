@@ -51,6 +51,49 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
+def _patch_worker_finish_version() -> None:
+    """Ensure workers finish jobs with the leased version number.
+
+    Some pyjobkit builds return job objects whose ``version`` remains the
+    pre-lease value (usually ``0``) even though the database row was bumped
+    during leasing. The backend later checks ``expected_version`` during
+    ``finish`` and rejects the update when it still sees the stale value. To
+    guard against this we gently synchronize both ``version`` and
+    ``expected_version`` to at least ``1`` right before finishing a job.
+    """
+
+    from pyjobkit.worker import Worker
+
+    if getattr(Worker, "_loadtest_finish_version_patched", False):
+        return
+
+    original_finish_job = Worker.finish_job
+
+    async def finish_job_with_version(self, job, *args, **kwargs):  # type: ignore[override]
+        version = getattr(job, "version", 0) or 0
+        expected_version = getattr(job, "expected_version", version) or version
+
+        if version == 0 and expected_version == 0:
+            new_version = 1
+            try:
+                job.version = new_version
+            except Exception:
+                logger.debug("Не удалось обновить job.version перед finish", exc_info=True)
+
+            try:
+                job.expected_version = new_version
+            except Exception:
+                logger.debug(
+                    "Не удалось обновить job.expected_version перед finish",
+                    exc_info=True,
+                )
+
+        return await original_finish_job(self, job, *args, **kwargs)
+
+    Worker.finish_job = finish_job_with_version
+    Worker._loadtest_finish_version_patched = True
+
+
 class Metrics:
     """Thread-safe-ish metrics storage used across coroutines."""
 
@@ -278,6 +321,8 @@ async def start_benchmark(
     dsn: str, rate: int, concurrency: int
 ) -> Tuple[Engine, Iterable[asyncio.Task]]:
     """Create engine, workers and background tasks for the benchmark."""
+
+    _patch_worker_finish_version()
 
     metrics.start_time = time.time()
     metrics.last_time = metrics.start_time
