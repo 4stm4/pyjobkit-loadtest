@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -36,6 +37,8 @@ async def shutdown_event():
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     queue_length = max(metrics.enqueued - metrics.processed, 0)
+    runtime_s = time.time() - metrics.start_time
+    stalled = runtime_s > 5 and metrics.processed == 0
     return templates.TemplateResponse(
         "index.html",
         {
@@ -47,6 +50,9 @@ async def dashboard(request: Request):
             "total_processed": metrics.processed,
             "queue_length": queue_length,
             "rps_history": list(metrics.rps_history),
+            "stalled": stalled,
+            "error_events": metrics.error_events,
+            "last_error": metrics.last_error,
         },
     )
 

@@ -18,6 +18,14 @@
     <div>Средний RPS (за минуту): <strong>{{ "%.2f"|format(avg_rps) }}</strong></div>
     <div>Всего обработано заданий: <strong>{{ total_processed }}</strong></div>
     <div>Заданий в очереди (оценка): <strong>{{ queue_length }}</strong></div>
+    {% if stalled %}
+      <div style="color: #f0883e; margin-top: 8px;">
+        Задания пока не исполняются (RPS=0). Проверьте логи воркера и настройки DSN/базы.
+        {% if error_events %}
+          Последняя ошибка ({{ error_events }} за всё время): {{ last_error|default('—') }}
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
 
   <div class="card">

@@ -34,7 +34,10 @@ class Metrics:
     enqueued: int = 0
     last_processed: int = 0
     last_time: float = time.time()
+    start_time: float = time.time()
     rps_history: deque = deque(maxlen=60)  # последние 60 секунд
+    error_events: int = 0
+    last_error: str | None = None
 
 
 DEFAULT_DSN = "sqlite+aiosqlite:///./jobkit.db"
@@ -114,15 +117,36 @@ def ensure_sqlite_directory(dsn: str) -> None:
 class InstrumentedSubprocessExecutor(SubprocessExecutor):
     """Executor that increments processed metrics after successful runs."""
 
+    @staticmethod
+    def _mirror_leased_version(job) -> None:
+        """Align in-memory job version with the value stored after leasing.
+
+        ``SQLBackend.lease`` increments ``version`` in the database, but the
+        job object that arrives to the executor may still contain the stale
+        value from before leasing. ``finish`` later uses this field for the
+        optimistic lock check, so we proactively mirror the leased version in
+        both ``version`` and ``expected_version`` (the latter is used by some
+        backend implementations).
+        """
+
+        current_version = getattr(job, "version", 0)
+        leased_version = current_version + 1
+
+        try:
+            job.version = leased_version
+        except Exception:
+            logger.debug("Не удалось обновить job.version, пропускаем", exc_info=True)
+
+        try:
+            # Some backends expect ``expected_version`` instead of ``version``
+            job.expected_version = leased_version
+        except Exception:
+            logger.debug(
+                "Не удалось обновить job.expected_version, пропускаем", exc_info=True
+            )
+
     async def execute(self, job):
-        # SQLBackend increments the job version when leasing a task. With the
-        # current pyjobkit release we observed that the in-memory ``job``
-        # object still carries the pre-lease version (0), which later causes
-        # ``finish`` to raise a version mismatch error. Bumping the local
-        # version to mirror the leased value keeps the optimistic lock check in
-        # sync with the database.
-        if hasattr(job, "version"):
-            job.version += 1
+        self._mirror_leased_version(job)
 
         result = await super().execute(job)
         metrics.processed += 1
@@ -160,7 +184,9 @@ async def enqueuer(engine: Engine, rate: int):
             metrics.enqueued += 1
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
+            metrics.error_events += 1
+            metrics.last_error = f"Не удалось поставить задачу: {exc}"
             logger.exception("Не удалось поставить задачу в очередь, повтор через секунду")
             await asyncio.sleep(1.0)
             continue
@@ -177,7 +203,9 @@ async def worker_runner(engine: Engine, concurrency: int):
             await worker.run()
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
+            metrics.error_events += 1
+            metrics.last_error = f"Сбой воркера: {exc}"
             logger.exception("Воркер упал, пробуем перезапустить через секунду")
             await asyncio.sleep(1.0)
 
@@ -200,6 +228,12 @@ async def start_benchmark(
     dsn: str, rate: int, concurrency: int
 ) -> Tuple[Engine, Iterable[asyncio.Task]]:
     """Create engine, workers and background tasks for the benchmark."""
+
+    metrics.start_time = time.time()
+    metrics.last_time = metrics.start_time
+    metrics.last_processed = metrics.processed
+    metrics.error_events = 0
+    metrics.last_error = None
 
     ensure_sqlite_directory(dsn)
     url = make_url(dsn)
