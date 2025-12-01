@@ -12,6 +12,8 @@ This repository contains a lightweight load testing benchmark for pyjobkit. The 
 
 2. On startup the container installs `git`, clones [https://github.com/4stm4/pyjobkit-loadtest](https://github.com/4stm4/pyjobkit-loadtest) into `/app`, installs dependencies from `/app/benchmark/requirements.txt` and then serves the benchmark app via Uvicorn on port `7777`.
 
+   Set `LOG_LEVEL=DEBUG` in the environment (default) to see detailed worker/enqueuer output in the container logs when tasks do not process.
+
 3. Open the benchmark UI at [http://localhost:7777](http://localhost:7777).
 
 If you want to run the app locally without Docker, the service will default to a
