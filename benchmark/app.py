@@ -137,11 +137,13 @@ async def enqueuer(engine: Engine, rate: int):
     """Постоянно ставит в очередь задачи с заданной скоростью."""
 
     interval = 1.0 / rate
+    default_timeout_s = 300  # to avoid NULL timeout values when enqueuing
     while True:
         try:
             await engine.enqueue(
                 kind="subprocess",
                 payload={"cmd": "echo . && sleep 0.005"},  # лёгкая нагрузка
+                timeout_s=default_timeout_s,
             )
             metrics.enqueued += 1
         except asyncio.CancelledError:
