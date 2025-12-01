@@ -73,7 +73,7 @@ job_tasks = Table(
     Column("cancel_requested", Integer, nullable=False, server_default=text("0")),
     Column("leased_by", Text),
     Column("lease_until", DateTime(timezone=True)),
-    Column("version", Integer, nullable=False, server_default=text("1")),
+    Column("version", Integer, nullable=False, server_default=text("0")),
     Column("timeout_s", Integer, nullable=False, server_default=text("300")),
 )
 
