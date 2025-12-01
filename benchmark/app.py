@@ -24,6 +24,30 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.sql.schema import Table
 
 
+LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
+
+
+def configure_logging() -> None:
+    """Configure verbose logging for easier debugging."""
+
+    level = getattr(logging, LOG_LEVEL, logging.DEBUG)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+    # Make sure pyjobkit internals are also verbose when debugging issues.
+    logging.getLogger("pyjobkit").setLevel(level)
+    logging.getLogger("pyjobkit.backends.sql").setLevel(level)
+
+    local_logger = logging.getLogger(__name__)
+    local_logger.debug(
+        "Логирование инициализировано: уровень=%s", logging.getLevelName(level)
+    )
+
+
+configure_logging()
+
 logger = logging.getLogger(__name__)
 
 
@@ -175,6 +199,14 @@ def load_settings() -> Tuple[str, int, int]:
     rate = int(os.getenv("ENQUEUE_RATE", "100"))
     concurrency = int(os.getenv("CONCURRENCY", "8"))
 
+    safe_url = make_url(dsn).render_as_string(hide_password=True)
+    logger.info(
+        "Запускаем с DSN=%s, скорость постановки=%s/с, воркеров=%s",
+        safe_url,
+        rate,
+        concurrency,
+    )
+
     return dsn, rate, concurrency
 
 
@@ -192,6 +224,13 @@ async def enqueuer(engine: Engine, rate: int):
                 timeout_s=default_timeout_s,
             )
             metrics.enqueued += 1
+
+            if metrics.enqueued <= 5 or metrics.enqueued % max(rate, 1) == 0:
+                logger.debug(
+                    "Поставлено задач всего: %s (порция из %s/с)",
+                    metrics.enqueued,
+                    rate,
+                )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -208,6 +247,7 @@ async def worker_runner(engine: Engine, concurrency: int):
     """Вспомогательный раннер, перезапускающий воркера при сбоях."""
 
     worker = Worker(engine, max_concurrency=concurrency)
+    logger.info("Запускаем воркер с concurrency=%s", concurrency)
     while True:
         try:
             await worker.run()
@@ -249,8 +289,13 @@ async def start_benchmark(
     url = make_url(dsn)
     connect_args = {"timeout": 30} if url.get_backend_name() == "sqlite" else {}
 
+    logger.info(
+        "Готовим backend %s (lease_ttl_s=60)",
+        url.render_as_string(hide_password=True),
+    )
     sql_engine: AsyncEngine = create_async_engine(dsn, connect_args=connect_args)
     await ensure_schema(sql_engine)
+    logger.info("Схема базы проверена, запускаем движок и фоновые задачи")
     backend = SQLBackend(sql_engine, lease_ttl_s=60)
     engine = Engine(backend=backend, executors=[InstrumentedSubprocessExecutor()])
 
