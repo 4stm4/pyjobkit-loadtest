@@ -63,12 +63,54 @@ def _patch_worker_finish_version() -> None:
     завершением задачи. В современных релизах библиотека сама выполняет эти
     проверки, поэтому отсутствие ``finish_job`` просто означает, что патч
     больше не нужен.
+
+    Последние версии pyjobkit используют публичный метод ``finish`` (без
+    ``_job``), поэтому здесь мы оборачиваем и его, и исторический
+    ``finish_job``. В обоих случаях перед делегированием в оригинальный метод
+    приводим ``version`` и ``expected_version`` к минимуму в ``1`` и
+    синхронизируем значения между собой. Это устраняет предупреждения вида
+    ``Version mismatch on finish ... (expected_version=0)`` даже если объект
+    задачи пришёл в воркер со старой версией.
     """
 
     from pyjobkit.worker import Worker
 
     if getattr(Worker, "_loadtest_finish_version_patched", False):
         return
+
+    def _ensure_version_fields(job) -> None:
+        version = getattr(job, "version", 0) or 0
+        expected_version = getattr(job, "expected_version", version) or version
+
+        if version == 0:
+            version = 1
+        if expected_version == 0:
+            expected_version = version
+
+        try:
+            job.version = version
+        except Exception:
+            logger.debug("Не удалось обновить job.version перед finish", exc_info=True)
+
+        try:
+            job.expected_version = expected_version
+        except Exception:
+            logger.debug(
+                "Не удалось обновить job.expected_version перед finish",
+                exc_info=True,
+            )
+
+    original_finish = getattr(Worker, "finish", None)
+    if original_finish is not None and not getattr(
+        Worker, "_loadtest_finish_wrapper_patched", False
+    ):
+
+        async def finish_with_version(self, job, *args, **kwargs):  # type: ignore[override]
+            _ensure_version_fields(job)
+            return await original_finish(self, job, *args, **kwargs)
+
+        Worker.finish = finish_with_version
+        Worker._loadtest_finish_wrapper_patched = True
 
     original_finish_job = getattr(Worker, "finish_job", None)
 
@@ -80,23 +122,7 @@ def _patch_worker_finish_version() -> None:
         return
 
     async def finish_job_with_version(self, job, *args, **kwargs):  # type: ignore[override]
-        version = getattr(job, "version", 0) or 0
-        expected_version = getattr(job, "expected_version", version) or version
-
-        if version == 0 and expected_version == 0:
-            new_version = 1
-            try:
-                job.version = new_version
-            except Exception:
-                logger.debug("Не удалось обновить job.version перед finish", exc_info=True)
-
-            try:
-                job.expected_version = new_version
-            except Exception:
-                logger.debug(
-                    "Не удалось обновить job.expected_version перед finish",
-                    exc_info=True,
-                )
+        _ensure_version_fields(job)
 
         return await original_finish_job(self, job, *args, **kwargs)
 
