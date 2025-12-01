@@ -47,7 +47,7 @@ metadata = MetaData()
 job_tasks = Table(
     "job_tasks",
     metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("id", Text, primary_key=True),
     Column(
         "created_at",
         DateTime(timezone=True),
