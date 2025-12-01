@@ -187,7 +187,8 @@ async def enqueuer(engine: Engine, rate: int):
         try:
             await engine.enqueue(
                 kind="subprocess",
-                payload={"cmd": "echo . && sleep 0.005"},  # лёгкая нагрузка
+                # Запускаем через bash, чтобы гарантированно выполнить команду как единую строку
+                payload={"cmd": ["bash", "-lc", "echo . && sleep 0.005"]},
                 timeout_s=default_timeout_s,
             )
             metrics.enqueued += 1
