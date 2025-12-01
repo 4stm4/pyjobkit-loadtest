@@ -51,85 +51,6 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
-def _patch_worker_finish_version() -> None:
-    """Ensure workers finish jobs with the leased version number.
-
-    Some legacy pyjobkit builds (до появления публичного метода ``finish``)
-    возвращали job-объекты, у которых ``version`` оставалась прежней (обычно
-    ``0``) несмотря на инкремент в базе при взятии в работу. Бэкенд затем
-    проверял ``expected_version`` во время ``finish`` и отвергал обновление,
-    видя устаревшее значение. Чтобы избежать этого, мы синхронизировали
-    ``version`` и ``expected_version`` до хотя бы ``1`` непосредственно перед
-    завершением задачи. В современных релизах библиотека сама выполняет эти
-    проверки, поэтому отсутствие ``finish_job`` просто означает, что патч
-    больше не нужен.
-
-    Последние версии pyjobkit используют публичный метод ``finish`` (без
-    ``_job``), поэтому здесь мы оборачиваем и его, и исторический
-    ``finish_job``. В обоих случаях перед делегированием в оригинальный метод
-    приводим ``version`` и ``expected_version`` к минимуму в ``1`` и
-    синхронизируем значения между собой. Это устраняет предупреждения вида
-    ``Version mismatch on finish ... (expected_version=0)`` даже если объект
-    задачи пришёл в воркер со старой версией.
-    """
-
-    from pyjobkit.worker import Worker
-
-    if getattr(Worker, "_loadtest_finish_version_patched", False):
-        return
-
-    def _ensure_version_fields(job) -> None:
-        version = getattr(job, "version", 0) or 0
-        expected_version = getattr(job, "expected_version", version) or version
-
-        if version == 0:
-            version = 1
-        if expected_version == 0:
-            expected_version = version
-
-        try:
-            job.version = version
-        except Exception:
-            logger.debug("Не удалось обновить job.version перед finish", exc_info=True)
-
-        try:
-            job.expected_version = expected_version
-        except Exception:
-            logger.debug(
-                "Не удалось обновить job.expected_version перед finish",
-                exc_info=True,
-            )
-
-    original_finish = getattr(Worker, "finish", None)
-    if original_finish is not None and not getattr(
-        Worker, "_loadtest_finish_wrapper_patched", False
-    ):
-
-        async def finish_with_version(self, job, *args, **kwargs):  # type: ignore[override]
-            _ensure_version_fields(job)
-            return await original_finish(self, job, *args, **kwargs)
-
-        Worker.finish = finish_with_version
-        Worker._loadtest_finish_wrapper_patched = True
-
-    original_finish_job = getattr(Worker, "finish_job", None)
-
-    if original_finish_job is None:
-        logger.info(
-            "Worker.finish_job отсутствует в текущей версии pyjobkit; пропускаем патч"
-        )
-        Worker._loadtest_finish_version_patched = True
-        return
-
-    async def finish_job_with_version(self, job, *args, **kwargs):  # type: ignore[override]
-        _ensure_version_fields(job)
-
-        return await original_finish_job(self, job, *args, **kwargs)
-
-    Worker.finish_job = finish_job_with_version
-    Worker._loadtest_finish_version_patched = True
-
-
 class Metrics:
     """Thread-safe-ish metrics storage used across coroutines."""
 
@@ -220,37 +141,7 @@ def ensure_sqlite_directory(dsn: str) -> None:
 class InstrumentedSubprocessExecutor(SubprocessExecutor):
     """Executor that increments processed metrics after successful runs."""
 
-    @staticmethod
-    def _mirror_leased_version(job) -> None:
-        """Align in-memory job version with the value stored after leasing.
-
-        ``SQLBackend.lease`` increments ``version`` in the database, but the
-        job object that arrives to the executor may still contain the stale
-        value from before leasing. ``finish`` later uses this field for the
-        optimistic lock check, so we proactively mirror the leased version in
-        both ``version`` and ``expected_version`` (the latter is used by some
-        backend implementations).
-        """
-
-        current_version = getattr(job, "version", 0)
-        leased_version = current_version + 1
-
-        try:
-            job.version = leased_version
-        except Exception:
-            logger.debug("Не удалось обновить job.version, пропускаем", exc_info=True)
-
-        try:
-            # Some backends expect ``expected_version`` instead of ``version``
-            job.expected_version = leased_version
-        except Exception:
-            logger.debug(
-                "Не удалось обновить job.expected_version, пропускаем", exc_info=True
-            )
-
     async def execute(self, job):
-        self._mirror_leased_version(job)
-
         try:
             result = await super().execute(job)
         except asyncio.CancelledError:
@@ -357,8 +248,6 @@ async def start_benchmark(
     dsn: str, rate: int, concurrency: int
 ) -> Tuple[Engine, Iterable[asyncio.Task]]:
     """Create engine, workers and background tasks for the benchmark."""
-
-    _patch_worker_finish_version()
 
     metrics.start_time = time.time()
     metrics.last_time = metrics.start_time
