@@ -1,4 +1,4 @@
-pyjobkit
+pyjobkit==0.2.0
 fastapi
 uvicorn[standard]
 jinja2

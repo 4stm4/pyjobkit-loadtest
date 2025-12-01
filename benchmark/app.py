@@ -156,6 +156,27 @@ class InstrumentedSubprocessExecutor(SubprocessExecutor):
         return result
 
 
+class LeaseAwareSQLBackend(SQLBackend):
+    """SQL backend compatible with pyjobkit 0.2.0 optimistic locking.
+
+    In pyjobkit 0.2.0 the lease query increments the `version` column in the
+    database, but the returned ``Job`` object still holds the pre-lease
+    version. When the worker later tries to finish the job, the optimistic
+    locking check compares the stale version with the incremented one in the
+    database and fails, leaving the task "running" until the lease expires.
+
+    By manually bumping the in-memory version to match the database after the
+    lease, we keep the worker and the persisted record in sync while staying
+    on the supported 0.2.0 release.
+    """
+
+    async def lease(self, worker_id: str):
+        job = await super().lease(worker_id)
+        if job and job.version is not None:
+            job.version += 1
+        return job
+
+
 def load_settings() -> Tuple[str, int, int]:
     """Read configuration from the environment with safe defaults."""
 
@@ -266,7 +287,7 @@ async def start_benchmark(
     sql_engine: AsyncEngine = create_async_engine(dsn, connect_args=connect_args)
     await ensure_schema(sql_engine)
     logger.info("Схема базы проверена, запускаем движок и фоновые задачи")
-    backend = SQLBackend(sql_engine, lease_ttl_s=60)
+    backend = LeaseAwareSQLBackend(sql_engine, lease_ttl_s=60)
     engine = Engine(backend=backend, executors=[InstrumentedSubprocessExecutor()])
 
     tasks = (
