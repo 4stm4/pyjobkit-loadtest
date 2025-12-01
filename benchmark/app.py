@@ -10,18 +10,9 @@ from pyjobkit import Engine, Worker
 from pyjobkit.backends.sql import SQLBackend
 from pyjobkit.executors import SubprocessExecutor
 from sqlalchemy.engine import make_url
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Index,
-    Integer,
-    JSON,
-    MetaData,
-    Text,
-    text,
-)
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlalchemy.sql.schema import Table
+
+from pyjobkit.backends.sql import schema
 
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
@@ -69,49 +60,6 @@ DEFAULT_DSN = "sqlite+aiosqlite:///./jobkit.db"
 metrics = Metrics()
 
 
-metadata = MetaData()
-
-job_tasks = Table(
-    "job_tasks",
-    metadata,
-    Column("id", Text, primary_key=True),
-    Column(
-        "created_at",
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=text("CURRENT_TIMESTAMP"),
-    ),
-    Column(
-        "scheduled_for",
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=text("CURRENT_TIMESTAMP"),
-    ),
-    Column("started_at", DateTime(timezone=True)),
-    Column("finished_at", DateTime(timezone=True)),
-    Column("status", Text, nullable=False, server_default=text("'queued'")),
-    Column("attempts", Integer, nullable=False, server_default=text("0")),
-    Column("max_attempts", Integer, nullable=False, server_default=text("25")),
-    Column("priority", Integer, nullable=False, server_default=text("100")),
-    Column("kind", Text, nullable=False),
-    Column("payload", JSON().with_variant(Text(), "sqlite"), nullable=False),
-    Column("result", JSON().with_variant(Text(), "sqlite")),
-    Column("idempotency_key", Text, unique=True),
-    Column("cancel_requested", Integer, nullable=False, server_default=text("0")),
-    Column("leased_by", Text),
-    Column("lease_until", DateTime(timezone=True)),
-    Column("version", Integer, nullable=False, server_default=text("0")),
-    Column("timeout_s", Integer, nullable=False, server_default=text("300")),
-)
-
-Index(
-    "idx_job_tasks_queue",
-    job_tasks.c.status,
-    job_tasks.c.scheduled_for,
-    job_tasks.c.lease_until,
-)
-
-
 async def ensure_schema(sql_engine: AsyncEngine):
     """Create required tables for the SQL backend if they are missing."""
 
@@ -119,7 +67,8 @@ async def ensure_schema(sql_engine: AsyncEngine):
         if sql_engine.url.get_backend_name() == "sqlite":
             await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
             await conn.exec_driver_sql("PRAGMA busy_timeout=30000")
-        await conn.run_sync(metadata.create_all)
+        # Используем схему из pyjobkit, как в рабочем примере taskboard.
+        await conn.run_sync(schema.metadata.create_all)
 
 
 def ensure_sqlite_directory(dsn: str) -> None:
