@@ -119,17 +119,29 @@ class LeaseAwareSQLBackend(SQLBackend):
     record in sync while staying on the supported 0.2.0 release.
     """
 
+    @staticmethod
+    def _bump_version(job) -> None:
+        """Keep the in-memory version in sync with the DB after leasing."""
+
+        if not job:
+            return
+
+        # The SQL backend increments ``version`` in the UPDATE statement but
+        # returns a ``Job`` object that still contains the previous value.
+        # ``None`` may also be returned depending on the DB defaults. We
+        # normalise everything to the incremented integer so subsequent finish
+        # operations do not trip optimistic locking.
+        job.version = (job.version or 0) + 1
+
     async def lease(self, worker_id: str):
         job = await super().lease(worker_id)
-        if job and job.version is not None:
-            job.version += 1
+        self._bump_version(job)
         return job
 
     async def lease_batch(self, worker_id: str, limit: int):
         jobs = await super().lease_batch(worker_id, limit)
         for job in jobs:
-            if job.version is not None:
-                job.version += 1
+            self._bump_version(job)
         return jobs
 
 

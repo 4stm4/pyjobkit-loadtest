@@ -25,5 +25,5 @@ SQLite database at `./jobkit.db` when the `DSN` environment variable is not set
 
 - Ensure the container has network access to GitHub so it can clone the repository during startup.
 - If you see `Could not open requirements file: [Errno 2] No such file or directory: 'benchmark/requirements.txt'`, verify the clone succeeded by checking `ls /app` inside the running container.
-- We target a single supported release: `pyjobkit==0.2.0`. No custom patches or alternate version branches are required in this repository.
+- We target a single supported release: `pyjobkit==0.2.0`. The benchmark wraps the SQL backend to bump the in-memory job version after leasing, avoiding the optimistic-lock failures seen in the stock `taskboard` example.
 - The dashboard displays `Текущий RPS: 0.0` until the worker processes at least one task. If RPS stays at zero for more than a few seconds, check the worker logs for crashes and verify that the database DSN is reachable. Когда воркер падает, на дэшборде отображается последняя ошибка — это прямой подсказчик, почему обработка не идёт.
