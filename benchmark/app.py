@@ -115,6 +115,15 @@ class InstrumentedSubprocessExecutor(SubprocessExecutor):
     """Executor that increments processed metrics after successful runs."""
 
     async def execute(self, job):
+        # SQLBackend increments the job version when leasing a task. With the
+        # current pyjobkit release we observed that the in-memory ``job``
+        # object still carries the pre-lease version (0), which later causes
+        # ``finish`` to raise a version mismatch error. Bumping the local
+        # version to mirror the leased value keeps the optimistic lock check in
+        # sync with the database.
+        if hasattr(job, "version"):
+            job.version += 1
+
         result = await super().execute(job)
         metrics.processed += 1
         return result
