@@ -166,8 +166,8 @@ class LeaseAwareSQLBackend(SQLBackend):
     database and fails, leaving the task "running" until the lease expires.
 
     By manually bumping the in-memory version to match the database after the
-    lease, we keep the worker and the persisted record in sync while staying
-    on the supported 0.2.0 release.
+    lease (including batch leases), we keep the worker and the persisted
+    record in sync while staying on the supported 0.2.0 release.
     """
 
     async def lease(self, worker_id: str):
@@ -175,6 +175,13 @@ class LeaseAwareSQLBackend(SQLBackend):
         if job and job.version is not None:
             job.version += 1
         return job
+
+    async def lease_batch(self, worker_id: str, limit: int):
+        jobs = await super().lease_batch(worker_id, limit)
+        for job in jobs:
+            if job.version is not None:
+                job.version += 1
+        return jobs
 
 
 def load_settings() -> Tuple[str, int, int]:
