@@ -54,12 +54,15 @@ logger = logging.getLogger(__name__)
 def _patch_worker_finish_version() -> None:
     """Ensure workers finish jobs with the leased version number.
 
-    Some pyjobkit builds return job objects whose ``version`` remains the
-    pre-lease value (usually ``0``) even though the database row was bumped
-    during leasing. The backend later checks ``expected_version`` during
-    ``finish`` and rejects the update when it still sees the stale value. To
-    guard against this we gently synchronize both ``version`` and
-    ``expected_version`` to at least ``1`` right before finishing a job.
+    Some legacy pyjobkit builds (до появления публичного метода ``finish``)
+    возвращали job-объекты, у которых ``version`` оставалась прежней (обычно
+    ``0``) несмотря на инкремент в базе при взятии в работу. Бэкенд затем
+    проверял ``expected_version`` во время ``finish`` и отвергал обновление,
+    видя устаревшее значение. Чтобы избежать этого, мы синхронизировали
+    ``version`` и ``expected_version`` до хотя бы ``1`` непосредственно перед
+    завершением задачи. В современных релизах библиотека сама выполняет эти
+    проверки, поэтому отсутствие ``finish_job`` просто означает, что патч
+    больше не нужен.
     """
 
     from pyjobkit.worker import Worker
@@ -67,7 +70,14 @@ def _patch_worker_finish_version() -> None:
     if getattr(Worker, "_loadtest_finish_version_patched", False):
         return
 
-    original_finish_job = Worker.finish_job
+    original_finish_job = getattr(Worker, "finish_job", None)
+
+    if original_finish_job is None:
+        logger.info(
+            "Worker.finish_job отсутствует в текущей версии pyjobkit; пропускаем патч"
+        )
+        Worker._loadtest_finish_version_patched = True
+        return
 
     async def finish_job_with_version(self, job, *args, **kwargs):  # type: ignore[override]
         version = getattr(job, "version", 0) or 0
