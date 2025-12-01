@@ -148,7 +148,16 @@ class InstrumentedSubprocessExecutor(SubprocessExecutor):
     async def execute(self, job):
         self._mirror_leased_version(job)
 
-        result = await super().execute(job)
+        try:
+            result = await super().execute(job)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            metrics.error_events += 1
+            metrics.last_error = f"Ошибка исполнения {type(exc).__name__}: {exc}"
+            logger.exception("Воркер не смог выполнить задачу")
+            raise
+
         metrics.processed += 1
         return result
 
