@@ -46,15 +46,21 @@ def load_settings() -> Tuple[int, int]:
 
 
 async def enqueuer(engine: Engine, rate: int):
-    """Быстрый enqueuer - ставит задачи пачками для максимального throughput."""
+    """Быстрый enqueuer с ограничением размера очереди."""
     
     default_timeout_s = 3_000
-    # Пачка задач за один цикл для уменьшения overhead asyncio
-    batch_size = max(1, rate // 100)  # ~10 задач за раз при rate=1000
+    batch_size = max(1, rate // 100)
     interval = batch_size / rate if rate > 0 else 0.01
+    max_queue = rate * 3  # Максимум 3 секунды работы в очереди
     
     while True:
         try:
+            # Проверяем размер очереди
+            queue_size = metrics.enqueued - metrics.processed
+            if queue_size >= max_queue:
+                await asyncio.sleep(0.01)  # Небольшая пауза
+                continue
+            
             # Ставим пачку задач
             for _ in range(batch_size):
                 await engine.enqueue(
