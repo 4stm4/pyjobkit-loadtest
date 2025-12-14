@@ -150,6 +150,72 @@ async def get_redis() -> aioredis.Redis:
     return _redis_client
 
 
+import hashlib
+
+# Константы для проверяемой работы
+HASH_ITERATIONS = 100  # Количество итераций хэширования
+EXPECTED_HASH = None  # Вычислим при первом запуске
+
+
+def compute_work(data: str, iterations: int) -> str:
+    """
+    Детерминированная CPU-bound работа.
+    Хэширует строку N раз — всегда даёт одинаковый результат.
+    """
+    result = data.encode()
+    for _ in range(iterations):
+        result = hashlib.sha256(result).digest()
+    return result.hex()
+
+
+class HashExecutor(SubprocessExecutor):
+    """
+    Executor с реальной проверяемой работой.
+    
+    Каждая задача выполняет N итераций SHA256.
+    Результат детерминирован и проверяем.
+    """
+    
+    def __init__(self, use_redis: bool = False):
+        self.kind = "subprocess"
+        import app
+        self._metrics = app.metrics
+        self._redis: Optional[aioredis.Redis] = None
+        self._use_redis = use_redis
+        self._batch_count = 0
+        self._iterations = int(os.getenv("HASH_ITERATIONS", "100"))
+        
+        # Вычисляем ожидаемый хэш один раз
+        self._expected = compute_work("benchmark", self._iterations)
+        
+    async def _get_redis(self) -> aioredis.Redis:
+        if self._redis is None:
+            self._redis = await get_redis()
+        return self._redis
+        
+    async def run(self, *, job_id: UUID, payload: dict, ctx: ExecContext):
+        """Выполняем реальную работу и проверяем результат"""
+        
+        # Реальная CPU работа
+        result = compute_work("benchmark", self._iterations)
+        
+        # Проверяем корректность (опционально)
+        if result != self._expected:
+            return {"returncode": 1, "stdout": "", "stderr": "hash mismatch"}
+        
+        # Обновляем метрики
+        self._metrics.processed += 1
+        self._batch_count += 1
+        
+        # Пакетное обновление Redis
+        if self._use_redis and self._batch_count >= 100:
+            redis = await self._get_redis()
+            await redis.incrby("pyjobkit:processed", self._batch_count)
+            self._batch_count = 0
+        
+        return {"returncode": 0, "stdout": result[:16], "stderr": ""}
+
+
 class FastRedisExecutor(SubprocessExecutor):
     """
     Быстрый executor с минимальным Redis overhead.
@@ -209,6 +275,7 @@ async def create_engine():
         return _global_engine
     
     dsn = os.getenv('DSN', 'memory://')
+    use_real_work = os.getenv('REAL_WORK', '1') == '1'  # По умолчанию включено
     
     # Всегда используем FastQueueBackend - он в 10x быстрее MemoryBackend
     backend = FastQueueBackend()
@@ -223,12 +290,25 @@ async def create_engine():
         print("✅ Redis OK")
         print("⚡ FastQueueBackend (asyncio.Queue)")
         
-        executor = FastRedisExecutor()
+        if use_real_work:
+            iterations = int(os.getenv("HASH_ITERATIONS", "100"))
+            print(f"🔨 HashExecutor (SHA256 x{iterations})")
+            executor = HashExecutor(use_redis=True)
+        else:
+            print("💨 FastRedisExecutor (no-op)")
+            executor = FastRedisExecutor()
         
     else:
         print(f"💾 MEMORY: {dsn}")
         print("⚡ FastQueueBackend (asyncio.Queue)")
-        executor = FastMockExecutor()
+        
+        if use_real_work:
+            iterations = int(os.getenv("HASH_ITERATIONS", "100"))
+            print(f"🔨 HashExecutor (SHA256 x{iterations})")
+            executor = HashExecutor(use_redis=False)
+        else:
+            print("💨 FastMockExecutor (no-op)")
+            executor = FastMockExecutor()
     
     _global_engine = Engine(backend=backend, executors=[executor])
     

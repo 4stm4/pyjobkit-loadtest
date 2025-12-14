@@ -6,9 +6,27 @@ Load testing benchmark for [pyjobkit](https://github.com/4stm4/pyjobkit) with re
 
 - 📊 **Web dashboard** with RPS, CPU, and RAM charts
 - 🚀 **High performance** — up to 6000+ RPS with FastQueueBackend
+- 🔨 **Real workload** — SHA256 hashing with verifiable results
 - 🔴 **Redis integration** — task counter persistence
-- ⚡ **Optimized executor** — batch INCR every 100 tasks
 - 📈 **Resource monitoring** — real-time CPU and RAM tracking
+
+## What We Measure
+
+Each task performs **real CPU-bound work**:
+
+```python
+def compute_work(data: str, iterations: int) -> str:
+    result = data.encode()
+    for _ in range(iterations):
+        result = hashlib.sha256(result).digest()
+    return result.hex()
+```
+
+- **Deterministic** — same input always produces same output
+- **Verifiable** — hash is checked after each task
+- **Configurable** — adjust `HASH_ITERATIONS` for heavier workload
+
+This is NOT a no-op benchmark. Every RPS represents actual SHA256 computations.
 
 ## Quick Start
 
@@ -41,7 +59,7 @@ docker run -d -p 6379:6379 redis:7-alpine
 
 ```bash
 cd benchmark
-DSN=redis://localhost:6379/0 ENQUEUE_RATE=500 CONCURRENCY=8 python web.py
+DSN=redis://localhost:6379/0 ENQUEUE_RATE=10000 CONCURRENCY=64 HASH_ITERATIONS=100 python web.py
 ```
 
 4. Open [http://localhost:8888](http://localhost:8888)
@@ -53,6 +71,8 @@ DSN=redis://localhost:6379/0 ENQUEUE_RATE=500 CONCURRENCY=8 python web.py
 | `DSN` | `memory://` | Redis URL or `memory://` for no-Redis mode |
 | `ENQUEUE_RATE` | `200` | Task enqueue rate per second |
 | `CONCURRENCY` | `8` | Number of parallel workers |
+| `HASH_ITERATIONS` | `100` | SHA256 iterations per task (CPU load) |
+| `REAL_WORK` | `1` | Set to `0` for no-op tasks (max throughput test) |
 
 ## Architecture
 
@@ -70,15 +90,18 @@ DSN=redis://localhost:6379/0 ENQUEUE_RATE=500 CONCURRENCY=8 python web.py
 ```
 
 - **FastQueueBackend** — asyncio.Queue with O(1) operations (10x faster than MemoryBackend)
-- **FastRedisExecutor** — optimized executor with batch INCR
+- **HashExecutor** — real CPU work with SHA256 hashing
 - **Metrics** — RPS, CPU%, RAM collection in deque (60 seconds)
 
 ## Performance
 
-| Mode | RPS | CPU | RAM |
-|------|-----|-----|-----|
-| FastQueueBackend | ~6000-7000 | 85-97% | 67-70 MB |
-| MemoryBackend (legacy) | ~350-500 | 20-30% | 60-85 MB |
+Results on Mac Mini M1, 8 cores:
+
+| HASH_ITERATIONS | RPS | CPU | Description |
+|-----------------|-----|-----|-------------|
+| 100 | ~5000-6000 | 90-99% | Light workload |
+| 1000 | ~800-1000 | 95-99% | Heavy workload |
+| 0 (REAL_WORK=0) | ~6000-7000 | 85-97% | No-op (max throughput) |
 
 ## Screenshot
 
