@@ -1,22 +1,26 @@
 import logging
 
 def setup_logging():
-    """Настройка логирования для более чистого вывода"""
+    """Настройка логирования для максимально чистого вывода"""
     
-    # Устанавливаем базовый уровень
-    logging.getLogger().setLevel(logging.INFO)
+    # Устанавливаем базовый уровень только для ERROR
+    logging.getLogger().setLevel(logging.ERROR)
     
-    # Отключаем DEBUG логи от aiosqlite
-    logging.getLogger("aiosqlite").setLevel(logging.WARNING)
-    
-    # Отключаем DEBUG логи от sqlalchemy
-    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+    # Полностью отключаем все логи от SQL-связанных библиотек (они больше не используются)
+    logging.getLogger("aiosqlite").setLevel(logging.CRITICAL)
+    logging.getLogger("sqlalchemy").setLevel(logging.CRITICAL)
+    logging.getLogger("sqlalchemy.pool").setLevel(logging.CRITICAL)
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.CRITICAL)
     
     # Отключаем излишнюю болтливость от uvicorn.access
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.ERROR)
     
-    # Отключаем DEBUG логи от pyjobkit.backends.sql.backend
-    logging.getLogger("pyjobkit.backends.sql.backend").setLevel(logging.INFO)
+    # Отключаем все логи от pyjobkit (теперь используем memory backend)
+    logging.getLogger("pyjobkit").setLevel(logging.ERROR)
+    logging.getLogger("pyjobkit.backends").setLevel(logging.CRITICAL)
+    logging.getLogger("pyjobkit.backends.sql").setLevel(logging.CRITICAL)
+    logging.getLogger("pyjobkit.backends.memory").setLevel(logging.ERROR)
+    logging.getLogger("pyjobkit.engine").setLevel(logging.ERROR)
     
     # Настраиваем формат логов для более читаемого вывода
     formatter = logging.Formatter(

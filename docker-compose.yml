@@ -1,14 +1,23 @@
 version: "3.9"
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: pyjobkit-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+
   benchmark:
     image: python:3.13-slim
     container_name: pyjobkit-benchmark
     working_dir: /app
+    depends_on:
+      - redis
     environment:
-      - DSN=sqlite+aiosqlite:///app/jobkit.db
-      - ENQUEUE_RATE=200
-      - CONCURRENCY=16
+      - DSN=redis://redis:6379/0
+      - ENQUEUE_RATE=2000
+      - CONCURRENCY=32
     ports:
       - "7777:7777"
     command: >-
@@ -16,5 +25,5 @@ services:
       && if [ ! -d /app/.git ]; then git clone --depth 1 https://github.com/4stm4/pyjobkit-loadtest /app; else cd /app && git pull --rebase; fi \ 
       && pip install --no-cache-dir -r /app/benchmark/requirements.txt \ 
       && cd /app/benchmark \ 
-      && uvicorn web:app --host 0.0.0.0 --port 7777"
+      && python web.py & python app.py & wait"
     restart: unless-stopped

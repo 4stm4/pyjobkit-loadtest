@@ -5,3 +5,4 @@ jinja2
 aiosqlite
 sqlalchemy[asyncio]
 psutil
+redis[hiredis]
