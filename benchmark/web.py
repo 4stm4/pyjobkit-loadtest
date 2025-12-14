@@ -16,6 +16,7 @@ from app import (
     stop_tasks,
 )
 from logger_cfg import configure_logging, logger
+from memory_db import get_redis
 
 configure_logging()
 
@@ -23,6 +24,18 @@ configure_logging()
 current_dir = Path(__file__).parent
 templates_dir = current_dir / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
+
+async def get_redis_counter() -> int:
+    """Получаем счётчик из Redis для проверки"""
+    try:
+        dsn = os.getenv('DSN', '')
+        if not dsn.startswith('redis://'):
+            return -1  # Redis не используется
+        redis = await get_redis()
+        val = await redis.get("pyjobkit:processed")
+        return int(val) if val else 0
+    except:
+        return -1
 
 # Глобальные переменные для benchmark
 benchmark_task = None
@@ -68,6 +81,9 @@ async def dashboard(request: Request):
         runtime_s = time.time() - metrics.start_time
         stalled = runtime_s > 5 and metrics.processed == 0
         
+        # Получаем счётчик Redis для проверки
+        redis_counter = await get_redis_counter()
+        
         return templates.TemplateResponse(
             "index.html",
             {
@@ -77,6 +93,7 @@ async def dashboard(request: Request):
                 if metrics.rps_history
                 else 0,
                 "total_processed": metrics.processed,
+                "redis_counter": redis_counter,
                 "queue_length": queue_length,
                 "rps_history": list(metrics.rps_history),
                 "cpu_history": list(metrics.cpu_history) if hasattr(metrics, 'cpu_history') else [],
@@ -101,6 +118,7 @@ async def dashboard(request: Request):
                 "current_rps": 0,
                 "avg_rps": 0,
                 "total_processed": 0,
+                "redis_counter": -1,
                 "queue_length": 0,
                 "rps_history": [],
                 "cpu_history": [],

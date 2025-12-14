@@ -16,7 +16,13 @@
   <div class="card">
     <div>Текущий RPS: <span class="big">{{ current_rps|int }}</span></div>
     <div>Средний RPS (за минуту): <strong>{{ avg_rps|int }}</strong></div>
-    <div>Всего обработано заданий: <strong>{{ total_processed }}</strong></div>
+    <div>Всего обработано заданий: <strong>{{ total_processed }}</strong>
+      {% if redis_counter >= 0 %}
+        <span style="color: {% if redis_counter == total_processed // 100 * 100 or (total_processed - redis_counter)|abs < 200 %}#79c879{% else %}#f0883e{% endif %}">
+          (Redis: {{ redis_counter }})
+        </span>
+      {% endif %}
+    </div>
     <div>Заданий в очереди (оценка): <strong>{{ queue_length }}</strong></div>
     {% if error_events %}
       <div style="color: #f0883e; margin-top: 8px;">
