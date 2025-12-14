@@ -46,58 +46,60 @@ def load_settings() -> Tuple[int, int]:
 
 
 async def enqueuer(engine: Engine, rate: int):
-    """Оптимизированный enqueuer с контролем CPU."""
-
-    # Адаптивный интервал - не быстрее чем нужно
-    base_interval = 1.0 / min(rate, 500)  # Максимум 500 enqueue/сек
+    """Быстрый enqueuer - ставит задачи пачками для максимального throughput."""
+    
     default_timeout_s = 3_000
-    max_queue_size = 1000  # Не накапливать больше 1000 задач
+    # Пачка задач за один цикл для уменьшения overhead asyncio
+    batch_size = max(1, rate // 100)  # ~10 задач за раз при rate=1000
+    interval = batch_size / rate if rate > 0 else 0.01
     
     while True:
         try:
-            # Контроль размера очереди - экономим CPU если очередь большая
-            queue_size = metrics.enqueued - metrics.processed
-            if queue_size > max_queue_size:
-                await asyncio.sleep(0.1)  # Пауза если очередь переполнена
-                continue
-            
-            await engine.enqueue(
-                kind="subprocess",
-                payload={"cmd": ["echo", "."]},  # Простая команда без bash
-                timeout_s=default_timeout_s,
-            )
-            metrics.enqueued += 1
+            # Ставим пачку задач
+            for _ in range(batch_size):
+                await engine.enqueue(
+                    kind="subprocess",
+                    payload={"cmd": ["echo", "."]},
+                    timeout_s=default_timeout_s,
+                )
+                metrics.enqueued += 1
 
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             metrics.error_events += 1
             metrics.last_error = f"Не удалось поставить задачу: {exc}"
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.1)
             continue
 
-        await asyncio.sleep(base_interval)
-
+        await asyncio.sleep(interval)
 
 async def worker_runner(engine: Engine, concurrency: int):
-    """Вспомогательный раннер, перезапускающий воркера при сбоях."""
+    """Вспомогательный раннер с оптимизированными настройками."""
 
-    worker = Worker(engine, max_concurrency=concurrency)
-    logger.info("Запускаем воркер с concurrency=%s", concurrency)
-    logger.info("Доступные исполнители в движке: %s", [ex.kind for ex in engine.executors.values()])
+    # Оптимизированные параметры для максимального throughput:
+    # - batch=32: берём по 32 задачи за раз
+    # - poll_interval=0.01: минимальная задержка между polls
+    # - lease_ttl=300: длинный lease чтобы не тратить время на extend
+    worker = Worker(
+        engine, 
+        max_concurrency=concurrency,
+        batch=min(concurrency, 32),  # Берём пачками
+        poll_interval=0.01,  # Быстрый polling
+        lease_ttl=300,  # Длинный lease - не тратим время на продление
+    )
+    logger.info("Запускаем воркер с concurrency=%s, batch=%s", concurrency, worker.batch)
     
     while True:
         try:
-            logger.info("Воркер начинает работу...")
             await worker.run()
         except asyncio.CancelledError:
-            logger.info("Воркер получил сигнал остановки")
             raise
         except Exception as exc:
             metrics.error_events += 1
             metrics.last_error = f"Сбой воркера: {exc}"
-            logger.exception("Воркер упал, пробуем перезапустить через секунду")
-            await asyncio.sleep(1.0)
+            logger.exception("Воркер упал, перезапуск...")
+            await asyncio.sleep(0.1)
 
 
 async def metrics_updater():
