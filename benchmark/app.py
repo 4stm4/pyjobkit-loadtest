@@ -114,10 +114,11 @@ async def metrics_updater():
         await asyncio.sleep(1.0)
         now = time.time()
         delta = metrics.processed - metrics.last_processed
-        rps = delta / max(now - metrics.last_time, 1e-6)
-
-        # RPS
-        metrics.rps_history.append(round(rps, 2))
+        elapsed = now - metrics.last_time
+        
+        # RPS = задач за секунду (округляем до целого)
+        rps = int(delta / elapsed) if elapsed > 0 else 0
+        metrics.rps_history.append(rps)
         
         # CPU % (текущий процесс)
         cpu_percent = process.cpu_percent()

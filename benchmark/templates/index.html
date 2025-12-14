@@ -14,8 +14,8 @@
   <h1>pyjobkit — нагрузочное тестирование</h1>
 
   <div class="card">
-    <div>Текущий RPS: <span class="big">{{ current_rps }}</span></div>
-    <div>Средний RPS (за минуту): <strong>{{ "%.2f"|format(avg_rps) }}</strong></div>
+    <div>Текущий RPS: <span class="big">{{ current_rps|int }}</span></div>
+    <div>Средний RPS (за минуту): <strong>{{ avg_rps|int }}</strong></div>
     <div>Всего обработано заданий: <strong>{{ total_processed }}</strong></div>
     <div>Заданий в очереди (оценка): <strong>{{ queue_length }}</strong></div>
     {% if error_events %}
@@ -36,7 +36,7 @@
       {% for r in rps_history %}
         <span style="color:{% if r > 100 %}#79c879{% else %}#f0883e{% endif %}">█</span>
       {% endfor %}
-      {{ rps_history|join(' | ') }}
+      {% for r in rps_history %}{{ r|int }}{% if not loop.last %} | {% endif %}{% endfor %}
     </div>
   </div>
 
