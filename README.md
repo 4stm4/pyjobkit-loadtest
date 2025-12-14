@@ -5,7 +5,7 @@ Load testing benchmark for [pyjobkit](https://github.com/4stm4/pyjobkit) with re
 ## Features
 
 - 📊 **Web dashboard** with RPS, CPU, and RAM charts
-- 🚀 **High performance** — up to 400+ RPS
+- 🚀 **High performance** — up to 6000+ RPS with FastQueueBackend
 - 🔴 **Redis integration** — task counter persistence
 - ⚡ **Optimized executor** — batch INCR every 100 tasks
 - 📈 **Resource monitoring** — real-time CPU and RAM tracking
@@ -69,7 +69,7 @@ DSN=redis://localhost:6379/0 ENQUEUE_RATE=500 CONCURRENCY=8 python web.py
                                       └─────────────┘
 ```
 
-- **MemoryBackend** — in-memory task queue (pyjobkit native)
+- **FastQueueBackend** — asyncio.Queue with O(1) operations (10x faster than MemoryBackend)
 - **FastRedisExecutor** — optimized executor with batch INCR
 - **Metrics** — RPS, CPU%, RAM collection in deque (60 seconds)
 
@@ -77,8 +77,12 @@ DSN=redis://localhost:6379/0 ENQUEUE_RATE=500 CONCURRENCY=8 python web.py
 
 | Mode | RPS | CPU | RAM |
 |------|-----|-----|-----|
-| Memory only | ~500 | 15-25% | 50-70 MB |
-| Redis (batch) | ~350-400 | 20-30% | 60-85 MB |
+| FastQueueBackend | ~6000-7000 | 85-97% | 67-70 MB |
+| MemoryBackend (legacy) | ~350-500 | 20-30% | 60-85 MB |
+
+## Screenshot
+
+![Dashboard](docs/screenshot.png)
 
 ## Requirements
 
