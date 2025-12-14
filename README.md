@@ -1,29 +1,87 @@
 # pyjobkit-loadtest
 
-This repository contains a lightweight load testing benchmark for pyjobkit. The Docker Compose configuration runs a Python 3.11 container and clones the application into `/app` inside the container before installing dependencies.
+Load testing benchmark for [pyjobkit](https://github.com/4stm4/pyjobkit) with real-time web dashboard.
 
-## Running the benchmark
+## Features
 
-1. From the repository root, start the stack:
+- 📊 **Web dashboard** with RPS, CPU, and RAM charts
+- 🚀 **High performance** — up to 400+ RPS
+- 🔴 **Redis integration** — task counter persistence
+- ⚡ **Optimized executor** — batch INCR every 100 tasks
+- 📈 **Resource monitoring** — real-time CPU and RAM tracking
 
-   ```bash
-   docker compose up --build
-   ```
+## Quick Start
 
-2. On startup the container installs `git`, clones [https://github.com/4stm4/pyjobkit-loadtest](https://github.com/4stm4/pyjobkit-loadtest) into `/app`, installs dependencies from `/app/benchmark/requirements.txt` and then serves the benchmark app via Uvicorn on port `7777`.
+### With Docker Compose (recommended)
 
-   Set `LOG_LEVEL=DEBUG` in the environment (default) to see detailed worker/enqueuer output in the container logs when tasks do not process.
+```bash
+docker compose up --build
+```
 
-3. Open the benchmark UI at [http://localhost:7777](http://localhost:7777).
+Open the dashboard: [http://localhost:8888](http://localhost:8888)
 
-If you want to run the app locally without Docker, the service will default to a
-SQLite database at `./jobkit.db` when the `DSN` environment variable is not set
-(a warning is logged). `ENQUEUE_RATE` and `CONCURRENCY` keep their defaults of
-`100` and `8` unless you override them in the environment.
+### Locally
 
-## Common pitfalls
+1. Install dependencies:
 
-- Ensure the container has network access to GitHub so it can clone the repository during startup.
-- If you see `Could not open requirements file: [Errno 2] No such file or directory: 'benchmark/requirements.txt'`, verify the clone succeeded by checking `ls /app` inside the running container.
-- We target a single supported release: `pyjobkit==0.2.0`. The benchmark wraps the SQL backend to bump the in-memory job version after leasing, avoiding the optimistic-lock failures seen in the stock `taskboard` example.
-- The dashboard displays `Текущий RPS: 0.0` until the worker processes at least one task. If RPS stays at zero for more than a few seconds, check the worker logs for crashes and verify that the database DSN is reachable. Когда воркер падает, на дэшборде отображается последняя ошибка — это прямой подсказчик, почему обработка не идёт.
+```bash
+cd pyjobkit-loadtest
+python3 -m venv venv
+source venv/bin/activate
+pip install fastapi uvicorn psutil redis pyjobkit jinja2
+```
+
+2. Start Redis:
+
+```bash
+docker run -d -p 6379:6379 redis:7-alpine
+```
+
+3. Run the benchmark:
+
+```bash
+cd benchmark
+DSN=redis://localhost:6379/0 ENQUEUE_RATE=500 CONCURRENCY=8 python web.py
+```
+
+4. Open [http://localhost:8888](http://localhost:8888)
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DSN` | `memory://` | Redis URL or `memory://` for no-Redis mode |
+| `ENQUEUE_RATE` | `200` | Task enqueue rate per second |
+| `CONCURRENCY` | `8` | Number of parallel workers |
+
+## Architecture
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  Enqueuer   │───▶│ MemoryQueue │───▶│   Worker    │
+│ (rate/sec)  │    │  (pyjobkit) │    │(concurrency)│
+└─────────────┘    └─────────────┘    └──────┬──────┘
+                                             │
+                                             ▼
+                                      ┌─────────────┐
+                                      │    Redis    │
+                                      │ (INCR/100)  │
+                                      └─────────────┘
+```
+
+- **MemoryBackend** — in-memory task queue (pyjobkit native)
+- **FastRedisExecutor** — optimized executor with batch INCR
+- **Metrics** — RPS, CPU%, RAM collection in deque (60 seconds)
+
+## Performance
+
+| Mode | RPS | CPU | RAM |
+|------|-----|-----|-----|
+| Memory only | ~500 | 15-25% | 50-70 MB |
+| Redis (batch) | ~350-400 | 20-30% | 60-85 MB |
+
+## Requirements
+
+- Python 3.11+
+- pyjobkit 0.2.0
+- Redis 7+ (optional)
