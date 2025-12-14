@@ -174,6 +174,7 @@ class HashExecutor(SubprocessExecutor):
     
     Каждая задача выполняет N итераций SHA256.
     Результат детерминирован и проверяем.
+    Redis счётчик инкрементируется 1:1 с локальным.
     """
     
     def __init__(self, use_redis: bool = False):
@@ -182,7 +183,6 @@ class HashExecutor(SubprocessExecutor):
         self._metrics = app.metrics
         self._redis: Optional[aioredis.Redis] = None
         self._use_redis = use_redis
-        self._batch_count = 0
         self._iterations = int(os.getenv("HASH_ITERATIONS", "100"))
         
         # Вычисляем ожидаемый хэш один раз
@@ -203,15 +203,13 @@ class HashExecutor(SubprocessExecutor):
         if result != self._expected:
             return {"returncode": 1, "stdout": "", "stderr": "hash mismatch"}
         
-        # Обновляем метрики
+        # Обновляем локальные метрики
         self._metrics.processed += 1
-        self._batch_count += 1
         
-        # Пакетное обновление Redis
-        if self._use_redis and self._batch_count >= 100:
+        # Синхронное обновление Redis (1:1 с локальным)
+        if self._use_redis:
             redis = await self._get_redis()
-            await redis.incrby("pyjobkit:processed", self._batch_count)
-            self._batch_count = 0
+            await redis.incr("pyjobkit:processed")
         
         return {"returncode": 0, "stdout": result[:16], "stderr": ""}
 
@@ -283,11 +281,11 @@ async def create_engine():
     if dsn.startswith('redis://'):
         print(f"🔴 REDIS: {dsn}")
         
-        # Проверяем подключение
+        # Проверяем подключение и СБРАСЫВАЕМ счётчик
         redis = await get_redis()
         await redis.ping()
         await redis.set("pyjobkit:processed", 0)
-        print("✅ Redis OK")
+        print("✅ Redis OK (счётчик сброшен)")
         print("⚡ FastQueueBackend (asyncio.Queue)")
         
         if use_real_work:

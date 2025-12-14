@@ -48,6 +48,16 @@ async def init_benchmark():
     if benchmark_task is None:
         rate, concurrency = load_settings()
         
+        # Сбрасываем Redis счётчик при старте (если используется Redis)
+        dsn = os.getenv('DSN', '')
+        if dsn.startswith('redis://'):
+            try:
+                redis = await get_redis()
+                await redis.set("pyjobkit:processed", 0)
+                logger.info("Redis счётчик сброшен на 0")
+            except Exception as e:
+                logger.warning(f"Не удалось сбросить Redis счётчик: {e}")
+        
         try:
             engine, tasks = await start_benchmark(rate, concurrency)
             # Создаем единую фоновую задачу
