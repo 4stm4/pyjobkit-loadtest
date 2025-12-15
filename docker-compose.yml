@@ -22,7 +22,7 @@ services:
     ports:
       - "8888:8888"
     command: >-
-      sh -c "pip install --no-cache-dir -r /app/benchmark/requirements.txt
+      sh -c "pip install --no-cache-dir fastapi uvicorn psutil redis pyjobkit jinja2
       && cd /app/benchmark
       && python web.py"
     volumes:
