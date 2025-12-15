@@ -94,8 +94,10 @@ async def dashboard(request: Request):
         # Получаем счётчик Redis для проверки
         redis_counter = await get_redis_counter()
         
-        # Debug: получаем счётчики INCRBY
-        from memory_db import _debug_incrby_count, _debug_incrby_total
+        # Debug: получаем счётчики INCRBY (импорт в начале файла)
+        import memory_db
+        debug_incrby_count = memory_db._debug_incrby_count
+        debug_incrby_total = memory_db._debug_incrby_total
         
         return templates.TemplateResponse(
             "index.html",
@@ -107,8 +109,8 @@ async def dashboard(request: Request):
                 else 0,
                 "total_processed": metrics.processed,
                 "redis_counter": redis_counter,
-                "debug_incrby_count": _debug_incrby_count,
-                "debug_incrby_total": _debug_incrby_total,
+                "debug_incrby_count": debug_incrby_count,
+                "debug_incrby_total": debug_incrby_total,
                 "queue_length": queue_length,
                 "rps_history": list(metrics.rps_history),
                 "cpu_history": list(metrics.cpu_history) if hasattr(metrics, 'cpu_history') else [],

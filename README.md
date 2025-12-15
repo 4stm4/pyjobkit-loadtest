@@ -95,13 +95,14 @@ DSN=redis://localhost:6379/0 ENQUEUE_RATE=10000 CONCURRENCY=64 HASH_ITERATIONS=1
 
 ## Performance
 
-Results on Mac Mini M1, 8 cores:
+Results on Mac Mini M1, 8 cores (CONCURRENCY=64, ENQUEUE_RATE=10000):
 
 | HASH_ITERATIONS | RPS | CPU | Description |
 |-----------------|-----|-----|-------------|
-| 100 | ~5000-6000 | 90-99% | Light workload |
-| 1000 | ~800-1000 | 95-99% | Heavy workload |
-| 0 (REAL_WORK=0) | ~6000-7000 | 85-97% | No-op (max throughput) |
+| 1 | ~5,400 | ~40% | Minimal workload |
+| 10 | ~4,600 | ~60% | Light workload |
+| 100 | ~3,500 | ~92% | Standard workload |
+| 1000 | ~800 | ~95% | Heavy workload |
 
 ## Screenshot
 

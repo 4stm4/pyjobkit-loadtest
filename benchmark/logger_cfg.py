@@ -2,19 +2,22 @@ import logging
 import os
 
 logger = logging.getLogger(__name__)
-LOG_LEVEL = os.getenv("LOG_LEVEL", "ERROR").upper()  # Отключаем логи для производительности
+LOG_LEVEL = os.getenv("LOG_LEVEL", "ERROR").upper()
 
 def configure_logging() -> None:
-    level = getattr(logging, LOG_LEVEL, logging.DEBUG)
+    """Единая настройка логирования для всего приложения"""
+    level = getattr(logging, LOG_LEVEL, logging.ERROR)
+    
     logging.basicConfig(
         level=level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
-
+    
+    # Отключаем шумные логгеры
     logging.getLogger("pyjobkit").setLevel(level)
-    logging.getLogger("pyjobkit.backends").setLevel(level)
+    logging.getLogger("pyjobkit.backends").setLevel(logging.CRITICAL)
+    logging.getLogger("uvicorn.access").setLevel(logging.ERROR)
 
-    local_logger = logging.getLogger(__name__)
-    local_logger.debug(
-        "Логирование инициализировано: уровень=%s", logging.getLevelName(level)
-    )
+
+# Алиас для обратной совместимости
+setup_logging = configure_logging

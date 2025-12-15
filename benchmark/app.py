@@ -6,8 +6,7 @@ from collections import deque
 from typing import Iterable, Tuple
 
 from pyjobkit import Engine, Worker
-from logger_cfg import logger
-from logging_config import setup_logging
+from logger_cfg import logger, setup_logging
 from memory_db import create_engine, create_instrumented_executor
 
 # Настраиваем логирование для чистого вывода
