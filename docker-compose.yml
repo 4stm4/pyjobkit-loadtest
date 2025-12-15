@@ -18,7 +18,7 @@ services:
       - DSN=redis://redis:6379/0
       - ENQUEUE_RATE=10000
       - CONCURRENCY=64
-      - HASH_ITERATIONS=100
+      - HASH_ITERATIONS=10
     ports:
       - "8888:8888"
     command: >-
