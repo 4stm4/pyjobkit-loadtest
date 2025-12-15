@@ -22,9 +22,9 @@ services:
     ports:
       - "8888:8888"
     command: >-
-      sh -c "pip install --no-cache-dir fastapi uvicorn psutil redis pyjobkit jinja2
+      sh -c "apt-get update && apt-get install -y --no-install-recommends git
+      && git clone --depth 1 https://github.com/4stm4/pyjobkit-loadtest /app
+      && pip install --no-cache-dir -r /app/benchmark/requirements.txt
       && cd /app/benchmark
       && python web.py"
-    volumes:
-      - .:/app:ro
     restart: unless-stopped
