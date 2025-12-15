@@ -68,11 +68,12 @@ DSN=redis://localhost:6379/0 ENQUEUE_RATE=10000 CONCURRENCY=64 HASH_ITERATIONS=1
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DSN` | `memory://` | Redis URL or `memory://` for no-Redis mode |
-| `ENQUEUE_RATE` | `200` | Task enqueue rate per second |
-| `CONCURRENCY` | `8` | Number of parallel workers |
+| `DSN` | `redis://localhost:6379/0` | Redis URL for counter persistence |
+| `ENQUEUE_RATE` | `10000` | Task enqueue rate per second |
+| `CONCURRENCY` | `64` | Number of parallel workers |
 | `HASH_ITERATIONS` | `100` | SHA256 iterations per task (CPU load) |
-| `REAL_WORK` | `1` | Set to `0` for no-op tasks (max throughput test) |
+
+> **Note:** Redis is used only for the task counter (`INCRBY`). Tasks are processed in memory via `FastQueueBackend`.
 
 ## Architecture
 

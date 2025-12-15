@@ -16,14 +16,15 @@ services:
       - redis
     environment:
       - DSN=redis://redis:6379/0
-      - ENQUEUE_RATE=2000
-      - CONCURRENCY=32
+      - ENQUEUE_RATE=10000
+      - CONCURRENCY=64
+      - HASH_ITERATIONS=100
     ports:
-      - "7777:7777"
+      - "8888:8888"
     command: >-
-      sh -c "apt-get update && apt-get install -y --no-install-recommends git \ 
-      && if [ ! -d /app/.git ]; then git clone --depth 1 https://github.com/4stm4/pyjobkit-loadtest /app; else cd /app && git pull --rebase; fi \ 
-      && pip install --no-cache-dir -r /app/benchmark/requirements.txt \ 
-      && cd /app/benchmark \ 
-      && python web.py & python app.py & wait"
+      sh -c "pip install --no-cache-dir -r /app/benchmark/requirements.txt
+      && cd /app/benchmark
+      && python web.py"
+    volumes:
+      - .:/app:ro
     restart: unless-stopped
