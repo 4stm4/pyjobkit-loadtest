@@ -25,6 +25,9 @@ class Metrics:
     ram_history: deque = deque(maxlen=60)  # RAM MB за 60 секунд
     error_events: int = 0
     last_error: str | None = None
+    # Memory profiling
+    running_dict_size: int = 0  # Размер _running dict в FastQueueBackend
+    queue_size: int = 0  # Размер очереди
 
 
 metrics = Metrics()
@@ -127,6 +130,18 @@ async def metrics_updater():
         # RAM MB (текущий процесс)
         ram_mb = process.memory_info().rss / 1024 / 1024
         metrics.ram_history.append(round(ram_mb, 1))
+        
+        # Memory profiling: размер _running dict
+        try:
+            from memory_db import _global_engine
+            if _global_engine and hasattr(_global_engine, '_backend'):
+                backend = _global_engine._backend
+                if hasattr(backend, '_running'):
+                    metrics.running_dict_size = len(backend._running)
+                if hasattr(backend, '_queue'):
+                    metrics.queue_size = backend._queue.qsize()
+        except:
+            pass
         
         metrics.last_processed = metrics.processed
         metrics.last_time = now

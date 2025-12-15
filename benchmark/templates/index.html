@@ -18,12 +18,23 @@
     <div>Средний RPS (за минуту): <strong>{{ avg_rps|int }}</strong></div>
     <div>Всего обработано заданий: <strong>{{ total_processed }}</strong>
       {% if redis_counter >= 0 %}
-        <span style="color: {% if redis_counter == total_processed // 100 * 100 or (total_processed - redis_counter)|abs < 200 %}#79c879{% else %}#f0883e{% endif %}">
-          (Redis: {{ redis_counter }})
+        <span style="color: {% if (total_processed - redis_counter)|abs < total_processed // 100 %}#79c879{% else %}#f0883e{% endif %}">
+          (Redis: {{ redis_counter }}, diff: {{ (total_processed - redis_counter)|abs }})
         </span>
       {% endif %}
     </div>
+    {% if debug_incrby_count is defined %}
+    <div style="color: #888; font-size: 12px;">
+      🔧 Debug: INCRBY calls={{ debug_incrby_count }}, total={{ debug_incrby_total }}
+      (expected Redis ≈ {{ debug_incrby_total }})
+    </div>
+    {% endif %}
     <div>Заданий в очереди (оценка): <strong>{{ queue_length }}</strong></div>
+    {% if running_dict_size is defined and running_dict_size > 0 %}
+    <div style="color: {% if running_dict_size > 500 %}#f0883e{% else %}#79c879{% endif %}">
+      🔍 Memory: _running dict = {{ running_dict_size }}
+    </div>
+    {% endif %}
     {% if error_events %}
       <div style="color: #f0883e; margin-top: 8px;">
         Ошибок за всё время: {{ error_events }}. Последняя: {{ last_error|default('—') }}

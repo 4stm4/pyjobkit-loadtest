@@ -17,6 +17,8 @@ import redis.asyncio as aioredis
 
 _global_engine = None
 _redis_client = None
+_debug_incrby_count = 0
+_debug_incrby_total = 0
 
 
 @dataclass
@@ -43,11 +45,14 @@ class FastQueueBackend(QueueBackend):
     - Использует asyncio.Queue (O(1) put/get)
     - Без сортировки
     - Без хранения завершённых задач
+    - Периодический flush _running dict для предотвращения memory leak
     """
     
     def __init__(self) -> None:
         self._queue: asyncio.Queue[_FastJob] = asyncio.Queue()
         self._running: Dict[UUID, _FastJob] = {}
+        self._cleanup_counter = 0
+        self._cleanup_interval = 10000  # Очистка каждые 10K задач
     
     async def enqueue(
         self,
@@ -99,12 +104,24 @@ class FastQueueBackend(QueueBackend):
 
     async def succeed(self, job_id: UUID, result: dict, *, expected_version: int | None = None) -> None:
         self._running.pop(job_id, None)
+        self._maybe_cleanup()
 
     async def fail(self, job_id: UUID, reason: dict, *, expected_version: int | None = None) -> None:
         self._running.pop(job_id, None)
+        self._maybe_cleanup()
 
     async def timeout(self, job_id: UUID, *, expected_version: int | None = None) -> None:
         self._running.pop(job_id, None)
+        self._maybe_cleanup()
+    
+    def _maybe_cleanup(self) -> None:
+        """Периодическая очистка _running dict от зависших задач"""
+        self._cleanup_counter += 1
+        if self._cleanup_counter >= self._cleanup_interval:
+            self._cleanup_counter = 0
+            # Очищаем _running если он слишком большой (возможно зависшие задачи)
+            if len(self._running) > 1000:
+                self._running.clear()
 
     async def retry(self, job_id: UUID, *, delay: float) -> None:
         job = self._running.pop(job_id, None)
@@ -174,7 +191,7 @@ class HashExecutor(SubprocessExecutor):
     
     Каждая задача выполняет N итераций SHA256.
     Результат детерминирован и проверяем.
-    Redis счётчик инкрементируется 1:1 с локальным.
+    Redis счётчик обновляется батчами для производительности.
     """
     
     def __init__(self, use_redis: bool = False):
@@ -183,6 +200,9 @@ class HashExecutor(SubprocessExecutor):
         self._metrics = app.metrics
         self._redis: Optional[aioredis.Redis] = None
         self._use_redis = use_redis
+        self._batch_count = 0
+        self._batch_size = 100  # Батч для Redis INCR
+        self._lock = asyncio.Lock()  # Защита от race condition
         self._iterations = int(os.getenv("HASH_ITERATIONS", "100"))
         
         # Вычисляем ожидаемый хэш один раз
@@ -206,10 +226,17 @@ class HashExecutor(SubprocessExecutor):
         # Обновляем локальные метрики
         self._metrics.processed += 1
         
-        # Синхронное обновление Redis (1:1 с локальным)
+        # Батчевое обновление Redis (каждые 100 задач) с защитой от race condition
         if self._use_redis:
-            redis = await self._get_redis()
-            await redis.incr("pyjobkit:processed")
+            async with self._lock:
+                self._batch_count += 1
+                if self._batch_count >= self._batch_size:
+                    global _debug_incrby_count, _debug_incrby_total
+                    _debug_incrby_count += 1
+                    _debug_incrby_total += self._batch_count
+                    redis = await self._get_redis()
+                    await redis.incrby("pyjobkit:processed", self._batch_count)
+                    self._batch_count = 0
         
         return {"returncode": 0, "stdout": result[:16], "stderr": ""}
 

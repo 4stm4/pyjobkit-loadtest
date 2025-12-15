@@ -16,7 +16,7 @@ from app import (
     stop_tasks,
 )
 from logger_cfg import configure_logging, logger
-from memory_db import get_redis
+from memory_db import get_redis, _debug_incrby_count, _debug_incrby_total
 
 configure_logging()
 
@@ -94,6 +94,9 @@ async def dashboard(request: Request):
         # Получаем счётчик Redis для проверки
         redis_counter = await get_redis_counter()
         
+        # Debug: получаем счётчики INCRBY
+        from memory_db import _debug_incrby_count, _debug_incrby_total
+        
         return templates.TemplateResponse(
             "index.html",
             {
@@ -104,12 +107,15 @@ async def dashboard(request: Request):
                 else 0,
                 "total_processed": metrics.processed,
                 "redis_counter": redis_counter,
+                "debug_incrby_count": _debug_incrby_count,
+                "debug_incrby_total": _debug_incrby_total,
                 "queue_length": queue_length,
                 "rps_history": list(metrics.rps_history),
                 "cpu_history": list(metrics.cpu_history) if hasattr(metrics, 'cpu_history') else [],
                 "ram_history": list(metrics.ram_history) if hasattr(metrics, 'ram_history') else [],
                 "current_cpu": metrics.cpu_history[-1] if hasattr(metrics, 'cpu_history') and metrics.cpu_history else 0,
                 "current_ram": metrics.ram_history[-1] if hasattr(metrics, 'ram_history') and metrics.ram_history else 0,
+                "running_dict_size": getattr(metrics, 'running_dict_size', 0),
                 "stalled": stalled,
                 "error_events": metrics.error_events,
                 "last_error": metrics.last_error,
