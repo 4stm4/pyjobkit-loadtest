@@ -84,6 +84,94 @@
     </div>
   </div>
 
+  {% if rps_per_minute %}
+  <div class="card">
+    <h3>📈 RPS по минутам (деградация) — {{ uptime_minutes }} мин</h3>
+    <div class="chart" style="height: auto; min-height: 60px;">
+      {% set max_rps = rps_per_minute|max if rps_per_minute else 1 %}
+      {% set first_rps = rps_per_minute[0] if rps_per_minute else 0 %}
+      {% for r in rps_per_minute %}
+        {% set height = (r / max_rps * 40)|int + 5 %}
+        {% set degradation = ((first_rps - r) / first_rps * 100)|int if first_rps > 0 else 0 %}
+        <span style="display: inline-block; width: 8px; height: {{ height }}px; margin: 1px; vertical-align: bottom;
+          background: {% if degradation > 20 %}#f85149{% elif degradation > 10 %}#f0883e{% else %}#79c879{% endif %};"
+          title="Минута {{ loop.index }}: {{ r }} RPS {% if degradation > 0 %}(-{{ degradation }}%){% endif %}">
+        </span>
+      {% endfor %}
+      <br>
+      {% if rps_per_minute|length > 1 %}
+        {% set first_rps = rps_per_minute[0] %}
+        {% set last_rps = rps_per_minute[-1] %}
+        {% set degradation = ((first_rps - last_rps) / first_rps * 100)|round(1) if first_rps > 0 else 0 %}
+        <span style="color: {% if degradation > 10 %}#f85149{% elif degradation > 5 %}#f0883e{% else %}#79c879{% endif %}">
+          Начало: {{ first_rps }} RPS → Сейчас: {{ last_rps }} RPS
+          {% if degradation > 0 %}
+            (деградация: -{{ degradation }}%)
+          {% elif degradation < 0 %}
+            (рост: +{{ (-degradation)|round(1) }}%)
+          {% else %}
+            (стабильно)
+          {% endif %}
+        </span>
+        | Среднее: {{ (rps_per_minute|sum / rps_per_minute|length)|int }} RPS
+        | Min: {{ rps_per_minute|min }} | Max: {{ rps_per_minute|max }}
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if cpu_per_minute or ram_per_minute %}
+  <div class="card" style="display: flex; gap: 20px;">
+    {% if cpu_per_minute %}
+    <div style="flex: 1;">
+      <h3>🔥 CPU % по минутам</h3>
+      <div class="chart" style="height: auto; min-height: 60px;">
+        {% set max_cpu = 100 %}
+        {% for c in cpu_per_minute %}
+          {% set height = (c / max_cpu * 40)|int + 5 %}
+          <span style="display: inline-block; width: 8px; height: {{ height }}px; margin: 1px; vertical-align: bottom;
+            background: {% if c > 80 %}#f85149{% elif c > 50 %}#f0883e{% else %}#79c879{% endif %};"
+            title="Минута {{ loop.index }}: {{ c }}%">
+          </span>
+        {% endfor %}
+        <br>
+        {% if cpu_per_minute|length > 0 %}
+          Среднее: {{ (cpu_per_minute|sum / cpu_per_minute|length)|round(1) }}%
+          | Min: {{ cpu_per_minute|min }}% | Max: {{ cpu_per_minute|max }}%
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% if ram_per_minute %}
+    <div style="flex: 1;">
+      <h3>💾 RAM по минутам</h3>
+      <div class="chart" style="height: auto; min-height: 60px;">
+        {% set max_ram = ram_per_minute|max if ram_per_minute else 100 %}
+        {% set first_ram = ram_per_minute[0] if ram_per_minute else 0 %}
+        {% for r in ram_per_minute %}
+          {% set height = (r / max_ram * 40)|int + 5 if max_ram > 0 else 5 %}
+          {% set growth = ((r - first_ram) / first_ram * 100)|int if first_ram > 0 else 0 %}
+          <span style="display: inline-block; width: 8px; height: {{ height }}px; margin: 1px; vertical-align: bottom;
+            background: {% if growth > 50 %}#f85149{% elif growth > 20 %}#f0883e{% else %}#79c879{% endif %};"
+            title="Минута {{ loop.index }}: {{ r|round(1) }} MB {% if growth > 0 %}(+{{ growth }}%){% endif %}">
+          </span>
+        {% endfor %}
+        <br>
+        {% if ram_per_minute|length > 1 %}
+          {% set first_ram = ram_per_minute[0] %}
+          {% set last_ram = ram_per_minute[-1] %}
+          {% set growth = ((last_ram - first_ram) / first_ram * 100)|round(1) if first_ram > 0 else 0 %}
+          <span style="color: {% if growth > 50 %}#f85149{% elif growth > 20 %}#f0883e{% else %}#79c879{% endif %}">
+            Начало: {{ first_ram|round(1) }} MB → Сейчас: {{ last_ram|round(1) }} MB
+            {% if growth > 0 %}(+{{ growth }}%){% elif growth < 0 %}({{ growth }}%){% endif %}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <small>Обновляется каждые 2 сек • ENQUEUE_RATE={{ enqueue_rate }}/s • CONCURRENCY={{ concurrency }}</small>
 </body>
 </html>

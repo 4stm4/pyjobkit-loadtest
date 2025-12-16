@@ -27,6 +27,14 @@ class Metrics:
     # Memory profiling
     running_dict_size: int = 0  # Размер _running dict в FastQueueBackend
     queue_size: int = 0  # Размер очереди
+    # Long-term history (per minute)
+    rps_per_minute: deque = deque(maxlen=1440)  # 24 часа по минутам
+    cpu_per_minute: deque = deque(maxlen=1440)  # CPU % по минутам
+    ram_per_minute: deque = deque(maxlen=1440)  # RAM MB по минутам
+    minute_samples: list = []  # Сэмплы RPS за текущую минуту
+    cpu_samples: list = []  # Сэмплы CPU за текущую минуту
+    ram_samples: list = []  # Сэмплы RAM за текущую минуту
+    last_minute: int = 0  # Последняя обработанная минута
 
 
 metrics = Metrics()
@@ -112,6 +120,8 @@ async def worker_runner(engine: Engine, concurrency: int):
 
 async def metrics_updater():
     process = psutil.Process()
+    # Инициализируем cpu_percent для корректных измерений
+    psutil.cpu_percent(interval=None)
     while True:
         await asyncio.sleep(1.0)
         now = time.time()
@@ -122,13 +132,31 @@ async def metrics_updater():
         rps = int(delta / elapsed) if elapsed > 0 else 0
         metrics.rps_history.append(rps)
         
-        # CPU % (текущий процесс)
-        cpu_percent = process.cpu_percent()
+        # CPU % (ВСЕЙ СИСТЕМЫ, не только процесса)
+        cpu_percent = psutil.cpu_percent(interval=None)
         metrics.cpu_history.append(round(cpu_percent, 1))
         
         # RAM MB (текущий процесс)
         ram_mb = process.memory_info().rss / 1024 / 1024
         metrics.ram_history.append(round(ram_mb, 1))
+        
+        # Long-term: среднее RPS, CPU, RAM за минуту
+        current_minute = int((now - metrics.start_time) // 60)
+        if current_minute > metrics.last_minute and metrics.minute_samples:
+            # Новая минута - сохраняем средние значения
+            avg_rps = sum(metrics.minute_samples) // len(metrics.minute_samples)
+            avg_cpu = round(sum(metrics.cpu_samples) / len(metrics.cpu_samples), 1) if metrics.cpu_samples else 0
+            avg_ram = round(sum(metrics.ram_samples) / len(metrics.ram_samples), 1) if metrics.ram_samples else 0
+            metrics.rps_per_minute.append(avg_rps)
+            metrics.cpu_per_minute.append(avg_cpu)
+            metrics.ram_per_minute.append(avg_ram)
+            metrics.minute_samples = []
+            metrics.cpu_samples = []
+            metrics.ram_samples = []
+            metrics.last_minute = current_minute
+        metrics.minute_samples.append(rps)
+        metrics.cpu_samples.append(cpu_percent)
+        metrics.ram_samples.append(ram_mb)
         
         # Memory profiling: размер _running dict
         try:
